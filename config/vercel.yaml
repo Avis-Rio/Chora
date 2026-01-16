@@ -1,0 +1,10 @@
+# Vercel 静态托管配置
+# 用于托管封面图片，使飞书多维表格可以正常显示
+
+vercel:
+  # 部署后的域名，例如：https://chora-covers.vercel.app
+  # 部署完成后，将此处的 domain 更新为实际的 Vercel 域名
+  domain: ""
+  
+  # 项目名称
+  project: "chora-covers"

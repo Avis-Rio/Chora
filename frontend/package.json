@@ -1,0 +1,13 @@
+{
+    "name": "chora-frontend",
+    "version": "1.0.0",
+    "description": "Chóra - Deep content archive with Feishu integration",
+    "scripts": {
+        "dev": "cd public && python3 -m http.server 8081",
+        "deploy": "vercel --prod"
+    },
+    "dependencies": {},
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

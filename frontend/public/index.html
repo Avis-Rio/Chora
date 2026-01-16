@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chóra | 深度内容的归宿之地</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="container nav-container">
+      <a href="/" class="logo">
+        <span class="logo-icon">◈</span>
+        <span class="logo-text">Chóra</span>
+      </a>
+
+
+
+      <div class="nav-actions">
+        <button class="btn-bracket">
+          <span class="btn-text">KEEP IN TOUCH</span>
+          <span class="bracket top-left"></span>
+          <span class="bracket top-right"></span>
+          <span class="bracket bottom-left"></span>
+          <span class="bracket bottom-right"></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="hero">
+    <div class="container hero-container">
+      <p class="hero-tagline">TOPOS · <span class="tagline-cn">深度内容的归宿之地</span></p>
+      <h1 class="hero-title">
+        声音落于纸上<br>时间换作深度
+      </h1>
+      <p class="hero-title-en">
+        Voice to page, time to depth
+      </p>
+      <p class="hero-subtitle">
+        <span class="subtitle-cn">播客与视频的文字重构</span><br>
+        <span class="hero-subtitle-en">Podcasts & videos, reimagined in words</span>
+      </p>
+
+      <div class="search-form">
+        <input type="text" id="global-search" placeholder="搜索标题、频道、嘉宾、内容..." class="search-input">
+        <button class="btn-bracket btn-search" onclick="handleSearch()">
+          <span class="btn-text">EXPLORE</span>
+          <span class="bracket top-left"></span>
+          <span class="bracket top-right"></span>
+          <span class="bracket bottom-left"></span>
+          <span class="bracket bottom-right"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Filter Section -->
+  <section class="filters">
+    <div class="container">
+      <div class="filter-scroll" id="filter-tags">
+        <!-- Tags will be dynamically populated by JS -->
+        <button class="filter-tab active" data-tag="all">ALL</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Content Grid -->
+  <section class="content">
+    <div class="container">
+      <div class="grid" id="articles-grid">
+        <!-- Articles will be populated by JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- Article Reader (Full Screen Modal) -->
+  <div class="reader" id="article-reader">
+    <div class="reader-overlay"></div>
+    <div class="reader-container">
+      <!-- Reading Progress Bar -->
+      <div class="reader-progress" id="reader-progress"></div>
+
+      <!-- Top Navigation -->
+      <div class="reader-nav">
+        <button class="reader-back" onclick="closeReader()">
+          <span>←</span> 返回
+        </button>
+        <a href="#" class="reader-source" id="reader-source-link" target="_blank">
+          溯源 <span>↗</span>
+        </a>
+      </div>
+
+      <!-- Cover Image -->
+      <div class="reader-cover" id="reader-cover">
+        <img src="" alt="" id="reader-cover-img">
+      </div>
+
+      <!-- Content Area with Sidebar -->
+      <div class="reader-body">
+        <!-- Left Sidebar (TOC) -->
+        <aside class="reader-sidebar" id="reader-sidebar">
+          <div class="toc-title">目录</div>
+          <nav class="toc-nav" id="toc-nav">
+            <!-- TOC items will be populated by JS -->
+          </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="reader-main" id="reader-main">
+          <!-- Header -->
+          <header class="reader-header">
+            <p class="reader-tagline">TOPOS · <span class="tagline-cn">深度内容</span></p>
+            <h1 class="reader-title" id="reader-title"></h1>
+            <div class="reader-meta" id="reader-meta"></div>
+            <div class="reader-tags" id="reader-tags"></div>
+          </header>
+
+          <!-- Quotes Section -->
+          <section class="reader-quotes" id="reader-quotes">
+            <h2 class="section-heading" id="section-quotes">◈ 金句摘录</h2>
+            <div class="quotes-list" id="quotes-list"></div>
+          </section>
+
+          <!-- Content Section -->
+          <section class="reader-content" id="reader-content">
+            <h2 class="section-heading" id="section-content">◈ 深度解读</h2>
+            <div class="content-body" id="content-body"></div>
+          </section>
+
+          <!-- End Mark -->
+          <div class="reader-endmark">◈</div>
+
+          <!-- Footer -->
+          <footer class="reader-footer">
+            <div class="footer-actions">
+              <button class="btn-back" onclick="closeReader()">← 返回列表</button>
+              <a href="#" class="btn-source" id="footer-source-link" target="_blank">溯源 ↗</a>
+            </div>
+            <p class="footer-brand">Chóra · 深度内容的归宿之地</p>
+          </footer>
+        </main>
+      </div>
+
+      <!-- Back to Top Button -->
+      <button class="back-to-top" id="back-to-top" onclick="scrollReaderToTop()">↑</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
