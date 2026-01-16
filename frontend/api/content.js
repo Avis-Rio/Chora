@@ -3,7 +3,7 @@
  * Securely fetches content from Feishu without exposing credentials
  */
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
     // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -25,7 +25,15 @@ export default async function handler(req, res) {
         const TABLE_ID = process.env.FEISHU_TABLE_ID;
 
         if (!APP_ID || !APP_SECRET || !BASE_ID || !TABLE_ID) {
-            return res.status(500).json({ error: 'Missing Feishu configuration' });
+            return res.status(500).json({
+                error: 'Missing Feishu configuration',
+                missing: {
+                    APP_ID: !APP_ID,
+                    APP_SECRET: !APP_SECRET,
+                    BASE_ID: !BASE_ID,
+                    TABLE_ID: !TABLE_ID
+                }
+            });
         }
 
         // Step 1: Get access token
@@ -122,7 +130,7 @@ export default async function handler(req, res) {
         console.error('API Error:', error);
         return res.status(500).json({ error: 'Internal server error', message: error.message });
     }
-}
+};
 
 // Parse quotes from text field
 function parseQuotes(quotesText) {
