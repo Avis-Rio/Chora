@@ -28,7 +28,7 @@
 
 
       <div class="nav-actions">
-        <button class="btn-bracket">
+        <button class="btn-bracket" onclick="openSubscribeModal()">
           <span class="btn-text">KEEP IN TOUCH</span>
           <span class="bracket top-left"></span>
           <span class="bracket top-right"></span>
@@ -156,6 +156,25 @@
 
       <!-- Back to Top Button -->
       <button class="back-to-top" id="back-to-top" onclick="scrollReaderToTop()">↑</button>
+    </div>
+  </div>
+
+  <!-- Subscribe Modal (Keep in Touch) -->
+  <div class="subscribe-modal" id="subscribe-modal">
+    <div class="subscribe-overlay" onclick="closeSubscribeModal()"></div>
+    <div class="subscribe-content">
+      <button class="subscribe-close" onclick="closeSubscribeModal()">✕</button>
+      <div class="subscribe-header">
+        <span class="subscribe-icon">◇</span>
+        <span class="subscribe-brand">Chóra × Rhizomata</span>
+      </div>
+      <h2 class="subscribe-title">水平生长，慢即清醒</h2>
+      <p class="subscribe-subtitle">在加速的世界，重拾思考的呼吸</p>
+      <div class="subscribe-qr">
+        <img src="/assets/rhizomata-qr.png" alt="Rhizomata QR Code">
+      </div>
+      <p class="subscribe-action">扫码关注 <span class="subscribe-name">Rhizomata</span></p>
+      <p class="subscribe-tagline">Stay slow, stay curious.</p>
     </div>
   </div>
 

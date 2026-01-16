@@ -706,3 +706,32 @@ window.scrollReaderToTop = function () {
     container.scrollTo({ top: 0, behavior: 'smooth' });
   }
 };
+
+// =====================================================
+// Subscribe Modal (Keep in Touch)
+// =====================================================
+window.openSubscribeModal = function () {
+  const modal = document.getElementById('subscribe-modal');
+  if (modal) {
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+};
+
+window.closeSubscribeModal = function () {
+  const modal = document.getElementById('subscribe-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+};
+
+// Close subscribe modal on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('subscribe-modal');
+    if (modal && modal.classList.contains('active')) {
+      closeSubscribeModal();
+    }
+  }
+});
