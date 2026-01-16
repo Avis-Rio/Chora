@@ -1,0 +1,43 @@
+# Chora 全局配置文件 (示例)
+# 路径: config/sources.yaml
+# 复制此文件并填入你的 API 密钥
+
+# API 密钥配置
+api_keys:
+  # Groq API Key (用于 Whisper 音频转录)
+  groq: "your_groq_api_key_here"
+  
+  # Gemini API 配置 (用于封面生成)
+  gemini:
+    provider: "third_party"
+    api_key: "your_gemini_api_key_here"
+    base_url: "https://yunwu.ai/v1beta/models/gemini-3-pro-image-preview:generateContent"
+    model: "gemini-3-pro-image-preview"
+    
+  # LLM API 配置 (用于内容改写)
+  llm:
+    provider: "third_party"
+    api_key: "your_llm_api_key_here"
+    base_url: "https://yunwu.ai/v1beta/models/gemini-3-pro-preview:generateContent"
+    model: "gemini-3-pro-preview"
+
+# 全局过滤与输出设置
+settings:
+  min_duration_minutes: 30
+  date_range_days: 3
+  output_dir: "./content_archive"
+
+# 订阅源列表
+subscriptions:
+  youtube:
+    - channel_id: "UCWXYDYv5STLk-zoxMP2I1Lw"
+      name: "Dan Koe"
+    - channel_id: "UCO5QSoES5yn2Dw7YixDYT5Q"
+      name: "Aperture"
+    - channel_id: "UCKV2yWPB3wn0RTZh3cTD8YA"
+      name: "硅谷101"
+
+  xiaoyuzhou:
+    - podcast_id: "5e4ee557418a84a0466737b7"
+      name: "忽左忽右"
+      include_keywords: ["午后偏见", "午後偏見"]

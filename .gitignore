@@ -10,7 +10,8 @@ env/
 venv/
 
 # Config with secrets
-config/feishu.yaml
+config/*.yaml
+!config/*.example.yaml
 
 # IDE
 .idea/
