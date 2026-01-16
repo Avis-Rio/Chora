@@ -1,28 +1,16 @@
 {
-    "version": 2,
-    "public": true,
-    "builds": [
+    "rewrites": [
         {
-            "src": "api/**/*.js",
-            "use": "@vercel/node"
+            "source": "/api/(.*)",
+            "destination": "/api/$1"
         },
         {
-            "src": "public/**",
-            "use": "@vercel/static"
-        }
-    ],
-    "routes": [
-        {
-            "src": "/api/(.*)",
-            "dest": "/api/$1"
+            "source": "/covers/(.*)",
+            "destination": "/public/covers/$1"
         },
         {
-            "src": "/covers/(.*)",
-            "dest": "/public/covers/$1"
-        },
-        {
-            "src": "/(.*)",
-            "dest": "/public/$1"
+            "source": "/(.*)",
+            "destination": "/public/$1"
         }
     ]
 }
