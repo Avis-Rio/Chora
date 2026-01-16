@@ -27,10 +27,21 @@ Thumbs.db
 *.tmp
 *.log
 
-# Large content files (optional - uncomment if needed)
-# content_archive/
-# content_export.json
+# Content archive (generated data)
+content_archive/
+content_export.json
+
+# Frontend generated data (synced from archive)
+frontend/public/data/
+frontend/public/covers/
 
 # Node
 node_modules/
 .vercel/
+
+# Skill docs (reference only)
+"How to create Skills for Claude steps and examples  Claude.md"
+"Crafting a Production-Grade Claude Skill.md"
+
+# Agent files
+.agent/
