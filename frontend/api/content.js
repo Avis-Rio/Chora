@@ -75,10 +75,19 @@ module.exports = async function handler(req, res) {
         const frontendData = items.map(record => {
             const fields = record.fields || {};
 
-            // Extract cover URL from attachment field
+            // Extract cover URL from attachment field - use proxy for Feishu images
             let coverUrl = null;
             if (fields['封面'] && Array.isArray(fields['封面']) && fields['封面'].length > 0) {
-                coverUrl = fields['封面'][0].url || fields['封面'][0].tmp_url || null;
+                const originalUrl = fields['封面'][0].url || fields['封面'][0].tmp_url || null;
+                if (originalUrl) {
+                    // Extract file token from Feishu URL and use our proxy
+                    const tokenMatch = originalUrl.match(/medias\/([^\/]+)/);
+                    if (tokenMatch) {
+                        coverUrl = `/api/image?token=${tokenMatch[1]}`;
+                    } else {
+                        coverUrl = originalUrl; // Fallback to original if pattern doesn't match
+                    }
+                }
             }
 
             // Extract tags from multi-select field
