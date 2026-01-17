@@ -735,3 +735,16 @@ document.addEventListener('keydown', (e) => {
     }
   }
 });
+
+// =====================================================
+// Mobile TOC Toggle
+// =====================================================
+window.toggleMobileTOC = function () {
+  const toggle = document.getElementById('mobile-toc-toggle');
+  const sidebar = document.getElementById('reader-sidebar');
+
+  if (toggle && sidebar) {
+    toggle.classList.toggle('active');
+    sidebar.classList.toggle('mobile-visible');
+  }
+};

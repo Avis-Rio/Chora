@@ -883,6 +883,11 @@ body {
   gap: 60px;
 }
 
+/* Mobile TOC Toggle - hidden on desktop */
+.mobile-toc-toggle {
+  display: none;
+}
+
 /* Sidebar TOC */
 .reader-sidebar {
   width: 200px;
@@ -1331,11 +1336,76 @@ body {
     line-height: 1.9;
   }
 
-  /* Scrollable tables on mobile */
+  /* Scrollable tables on mobile with min-width */
   .content-table {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    min-width: 500px;
+    font-size: 13px;
+  }
+
+  .content-table th,
+  .content-table td {
+    padding: 10px 12px;
+  }
+
+  /* Mobile TOC Toggle */
+  .mobile-toc-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    background: #F5F5F5;
+    border: 1px solid #E5E5E5;
+    border-radius: 8px;
+    font-family: var(--font-serif-cn);
+    font-size: 14px;
+    color: #333;
+    cursor: pointer;
+  }
+
+  .mobile-toc-toggle::after {
+    content: '▼';
+    font-size: 10px;
+    transition: transform 0.3s;
+  }
+
+  .mobile-toc-toggle.active::after {
+    transform: rotate(180deg);
+  }
+
+  /* Mobile TOC Panel */
+  .reader-sidebar {
+    display: none;
+    position: relative;
+    width: 100%;
+    top: 0;
+    padding: 16px;
+    margin-bottom: 20px;
+    background: #F9F9F9;
+    border-radius: 8px;
+    border: 1px solid #EAEAEA;
+  }
+
+  .reader-sidebar.mobile-visible {
+    display: block;
+  }
+
+  .toc-title {
+    margin-bottom: 12px;
+  }
+
+  .toc-nav {
+    gap: 8px;
+  }
+
+  .toc-item {
+    font-size: 12px;
+    padding-left: 12px;
   }
 
   .footer-actions {
