@@ -305,6 +305,9 @@ class FeishuService:
         if data.get('tags'):
             all_fields["标签"] = data['tags']
         
+        # Set default publish status to True (checked)
+        all_fields["是否发布"] = True
+        
         # Filter to only available fields if provided
         if available_fields:
             fields = {k: v for k, v in all_fields.items() if k in available_fields}
