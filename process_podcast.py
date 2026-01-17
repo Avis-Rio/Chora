@@ -45,6 +45,24 @@ def get_episode_metadata(episode_id):
         result = subprocess.run(['curl', '-s', '-L'] + headers + [url], capture_output=True, text=True)
         html = result.stdout
         
+        # Try to extract from __NEXT_DATA__ (contains more detailed info including description)
+        next_data_match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
+        description = ""
+        guests = ""
+        
+        if next_data_match:
+            try:
+                next_data = json.loads(next_data_match.group(1))
+                episode = next_data.get('props', {}).get('pageProps', {}).get('episode', {})
+                description = episode.get('description', '')
+                
+                # Extract guests from description
+                guests = extract_guests_from_description(description)
+                if guests:
+                    print(f"  Extracted guests: {guests[:50]}...")
+            except:
+                pass
+        
         # Extract JSON-LD data (小宇宙使用 schema:podcast-show 但包含 PodcastEpisode 数据)
         json_match = re.search(r'<script name="schema:podcast-show" type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
         if json_match:
@@ -65,7 +83,9 @@ def get_episode_metadata(episode_id):
                 'channel': channel,
                 'upload_date': pub_date,
                 'audio_url': audio_url,
-                'episode_id': episode_id
+                'episode_id': episode_id,
+                'guests': guests,  # 新增嘉宾字段
+                'description': description  # 保留描述用于 AI 参考
             }
         
         # Fallback: extract from HTML title tag
@@ -77,12 +97,57 @@ def get_episode_metadata(episode_id):
             'channel': 'Unknown',
             'upload_date': datetime.now().strftime('%Y-%m-%d'),
             'audio_url': '',
-            'episode_id': episode_id
+            'episode_id': episode_id,
+            'guests': guests,
+            'description': description
         }
         
     except Exception as e:
         print(f"Error fetching metadata: {e}")
         return None
+
+
+def extract_guests_from_description(description):
+    """从小宇宙节目描述中提取嘉宾信息。
+    
+    常见格式：
+    - "本期话题成员 -\n嘉宾1，简介\n嘉宾2，简介"
+    - "嘉宾：xxx"
+    - "本期嘉宾：xxx"
+    """
+    if not description:
+        return ""
+    
+    guests_lines = []
+    
+    # 模式1：查找 "本期话题成员" 或 "本期嘉宾" 部分
+    patterns = [
+        r'[-–—]\s*本期话题成员\s*[-–—]\s*\n(.*?)(?=\n[-–—]|\n\n|\Z)',
+        r'[-–—]\s*嘉宾\s*[-–—]\s*\n(.*?)(?=\n[-–—]|\n\n|\Z)',
+        r'本期嘉宾[：:]\s*(.*?)(?=\n\n|\Z)',
+        r'嘉宾[：:]\s*(.*?)(?=\n\n|\Z)',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, description, re.DOTALL)
+        if match:
+            content = match.group(1).strip()
+            # 按行分割，每行是一个嘉宾
+            lines = [line.strip() for line in content.split('\n') if line.strip()]
+            # 过滤掉时间轴等无关内容
+            for line in lines:
+                # 跳过时间轴格式 (如 "01:58 xxx")
+                if re.match(r'^\d{1,2}:\d{2}', line):
+                    break
+                # 跳过空行和分隔符
+                if line.startswith('-') and len(line) < 5:
+                    continue
+                guests_lines.append(line)
+            
+            if guests_lines:
+                break
+    
+    return '\n'.join(guests_lines)
 
 def download_audio(audio_url, output_path):
     """Download audio file from URL."""
@@ -230,7 +295,7 @@ def process_podcast(podcast_url):
     else:
         print(f"Directory exists: {output_dir}")
     
-    # Save initial metadata (will be updated by AI with 嘉宾 and 金句)
+    # Save initial metadata (包含从页面提取的嘉宾信息)
     metadata_path = os.path.join(output_dir, "metadata.md")
     source_url = f"https://www.xiaoyuzhoufm.com/episode/{episode_id}"
     if not os.path.exists(metadata_path):
@@ -246,6 +311,14 @@ def process_podcast(podcast_url):
 ## 发布时间
 {metadata['upload_date']}
 """
+        # 如果提取到嘉宾信息，直接写入 metadata（而非依赖 AI 推断）
+        if metadata.get('guests'):
+            initial_metadata += f"""
+## 嘉宾
+{metadata['guests']}
+"""
+            print(f"  Saved extracted guests to metadata.md")
+        
         with open(metadata_path, "w", encoding="utf-8") as f:
             f.write(initial_metadata)
         print("Saved initial metadata.md")

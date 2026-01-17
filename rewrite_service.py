@@ -212,7 +212,8 @@ def rewrite_content(transcript_path, metadata_path, output_path):
                 'title': '',
                 'source': '',
                 'source_url': '',
-                'publish_date': ''
+                'publish_date': '',
+                'guests': ''  # 新增：保留已从页面提取的嘉宾
             }
             
             if os.path.exists(metadata_path):
@@ -239,6 +240,11 @@ def rewrite_content(transcript_path, metadata_path, output_path):
                     date_match = re.search(r'##\s*发布时间\s*\n(.+?)(?=\n##|\Z)', existing_content, re.MULTILINE | re.DOTALL)
                     if date_match:
                         original_fields['publish_date'] = date_match.group(1).strip()
+                    
+                    # 提取已有嘉宾信息（优先保留从页面提取的）
+                    existing_guests_match = re.search(r'##\s*嘉宾\s*\n(.+?)(?=\n##|\Z)', existing_content, re.MULTILINE | re.DOTALL)
+                    if existing_guests_match:
+                        original_fields['guests'] = existing_guests_match.group(1).strip()
             
             # 从 AI 输出中提取嘉宾和金句
             ai_guests = ""
@@ -271,9 +277,10 @@ def rewrite_content(transcript_path, metadata_path, output_path):
             if original_fields['publish_date']:
                 final_metadata += f"## 发布时间\n{original_fields['publish_date']}\n\n"
             
-            # 嘉宾（AI 生成）
-            if ai_guests and ai_guests.lower() not in ['无', '[主要嘉宾或演讲者姓名']:
-                final_metadata += f"## 嘉宾\n{ai_guests}\n\n"
+            # 嘉宾（优先使用从页面提取的，其次使用 AI 生成的）
+            final_guests = original_fields['guests'] or ai_guests
+            if final_guests and final_guests.lower() not in ['无', '[主要嘉宾或演讲者姓名']:
+                final_metadata += f"## 嘉宾\n{final_guests}\n\n"
             
             # 金句（AI 生成）
             if ai_quotes and not ai_quotes.startswith('['):
