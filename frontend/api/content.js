@@ -137,8 +137,10 @@ module.exports = async function handler(req, res) {
         // Sort by publish date (newest first)
         frontendData.sort((a, b) => (b.publish_date || '').localeCompare(a.publish_date || ''));
 
-        // Cache for 1 minute (reduced for faster content updates)
-        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=30');
+        // Disable cache for real-time content updates
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         return res.status(200).json(frontendData);
 
     } catch (error) {
