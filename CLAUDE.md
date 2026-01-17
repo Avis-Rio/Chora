@@ -196,3 +196,52 @@ FEISHU_TABLE_ID=<optional>
 - `requests`：HTTP 请求
 - `pyyaml`：YAML 配置解析
 - `ffmpeg`：pydub 所需（系统依赖）
+
+## 前端 Chóra
+
+### 技术架构
+- **部署**：Vercel Serverless Functions + 静态站点
+- **数据源**：飞书多维表格 API（通过 `/api/content` 代理）
+- **样式**：原生 CSS + 汇文明朝体自定义字体
+- **交互**：原生 JavaScript（无框架）
+
+### API 端点
+- `/api/content`：从飞书获取文章列表
+- `/api/image?token={token}`：代理飞书图片下载（处理认证）
+
+### 已实现功能
+
+#### 核心功能
+- 文章卡片网格布局（响应式 3→2→1 列）
+- 全文阅读器（侧边栏 TOC、进度条、返回顶部）
+- 全局搜索（标题、频道、嘉宾、内容）
+- 标签过滤系统
+
+#### 交互增强
+- **Logo 悬停动效**：旋转 180° + 橙色点亮
+- **Keep in Touch 弹窗**：Rhizomata 公众号二维码
+- **移动端卡片点亮**：Intersection Observer 实现滚动到中心自动高亮
+
+### 移动端优化（2026-01-17）
+
+#### 已修复问题
+1. **封面模糊效果**：768px 减弱模糊，480px 完全移除
+2. **内容溢出**：添加 `flex-direction: column` + `overflow-x: hidden`
+3. **表格横向滚动**：使用 `.table-wrapper` 包装器 + `min-width: 500px`
+4. **快读导航栏**：添加可折叠的移动端 TOC 按钮
+
+#### 响应式断点
+- **1024px**：2 列布局，隐藏桌面端 TOC
+- **768px**：1 列布局，封面模糊减弱，搜索框堆叠
+- **480px**：超小屏优化，完全移除模糊，字体缩小
+
+### 环境变量（Vercel）
+```bash
+FEISHU_APP_ID=<app_id>
+FEISHU_APP_SECRET=<app_secret>
+FEISHU_BASE_ID=<base_id>
+FEISHU_TABLE_ID=<table_id>
+```
+
+### 故障排除
+详见 `frontend/DEPLOY.md`
