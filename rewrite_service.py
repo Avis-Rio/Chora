@@ -7,8 +7,40 @@ import requests
 from utils.word_count import update_rewritten_file
 
 def load_config():
-    with open('config/sources.yaml', 'r') as f:
-        return yaml.safe_load(f)
+    config_path = 'config/sources.yaml'
+    if not os.path.exists(config_path):
+        print(f"错误: 找不到配置文件 {config_path}")
+        print(f"请从 config/sources.example.yaml 复制并填入 API 密钥")
+        return None
+    
+    with open(config_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+    
+    if not config:
+        print("错误: 配置文件为空")
+        return None
+    
+    return config
+
+def validate_api_config(config):
+    """验证 API 配置是否有效"""
+    if not config:
+        return False, "配置为空"
+    
+    api_keys = config.get('api_keys', {})
+    llm_config = api_keys.get('llm', {})
+    api_key = llm_config.get('api_key', '')
+    
+    if not api_key:
+        return False, "LLM API 密钥未配置"
+    
+    if 'your_' in api_key or api_key == 'your_llm_api_key_here':
+        return False, "LLM API 密钥是占位符，请填入有效密钥"
+    
+    if not llm_config.get('base_url'):
+        return False, "LLM base_url 未配置"
+    
+    return True, "配置有效"
 
 def read_file(path):
     with open(path, 'r', encoding='utf-8') as f:
@@ -18,6 +50,16 @@ def save_file(path, content):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content)
 
+def detect_language(text):
+    """检测文本是否主要是英文"""
+    # 统计ASCII字符比例
+    ascii_chars = sum(1 for c in text if ord(c) < 128)
+    total_chars = len(text)
+    if total_chars == 0:
+        return 'unknown'
+    ratio = ascii_chars / total_chars
+    return 'english' if ratio > 0.8 else 'chinese'
+
 def rewrite_content(transcript_path, metadata_path, output_path):
     print(f"Starting rewrite for {transcript_path}...")
 
@@ -26,10 +68,26 @@ def rewrite_content(transcript_path, metadata_path, output_path):
         return False
 
     config = load_config()
+    if not config:
+        return False
+    
+    # 验证 API 配置
+    is_valid, message = validate_api_config(config)
+    if not is_valid:
+        print(f"❌ API 配置错误: {message}")
+        print("请编辑 config/sources.yaml 并填入有效的 API 密钥")
+        return False
 
     # Read inputs
     transcript = read_file(transcript_path)
     prompt_template = read_file('config/rewrite-prompt.md')
+    
+    # 检测语言，如果是英文则添加翻译指令
+    lang = detect_language(transcript)
+    translation_instruction = ""
+    if lang == 'english':
+        print("📝 检测到英文转录，将在改写时自动翻译为中文")
+        translation_instruction = "\n\n**重要提示：原文是英文，请在改写时将内容翻译为流畅的中文。**\n"
 
     # Read metadata if available
     metadata_context = ""
@@ -39,6 +97,7 @@ def rewrite_content(transcript_path, metadata_path, output_path):
     # Construct prompt for Gemini
     full_prompt = f"""
     {prompt_template}
+    {translation_instruction}
 
     ---
 

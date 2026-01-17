@@ -13,9 +13,23 @@ STATE_PATH = 'config/state.yaml'
 def load_config():
     if not os.path.exists(CONFIG_PATH):
         print(f"错误: 找不到配置文件 {CONFIG_PATH}")
+        print(f"请从 {CONFIG_PATH.replace('.yaml', '.example.yaml')} 复制并填入 API 密钥")
         return None
     with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+    
+    # 验证必要的配置
+    if not config:
+        print("错误: 配置文件为空")
+        return None
+    
+    # 检查 API 密钥是否为占位符
+    api_keys = config.get('api_keys', {})
+    llm_key = api_keys.get('llm', {}).get('api_key', '')
+    if 'your_' in llm_key or not llm_key:
+        print("⚠️ 警告: LLM API 密钥未配置，AI 改写功能将不可用")
+    
+    return config
 
 def load_state():
     if not os.path.exists(STATE_PATH):
@@ -156,17 +170,26 @@ def _fetch_via_ytdlp(channel_id, name, cutoff_date, min_duration, include_keywor
     items = []
     for url in urls_to_try:
         try:
-            cmd = ['yt-dlp', '--quiet', '--flat-playlist', '--dump-json', '--playlist-items', '1-15', url]
+            # 减少获取数量：从 1-15 改为 1-8
+            cmd = ['yt-dlp', '--quiet', '--flat-playlist', '--dump-json', '--playlist-items', '1-8', url]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
             
             if result.returncode != 0 or not result.stdout.strip():
                 continue
             
-            # 只检查最新的 5 个视频（按倒序排列）
+            # 早期退出计数器
+            consecutive_old = 0
+            max_consecutive_old = 2  # 连续2个超出日期范围后停止
+            
             video_count = 0
             for line in result.stdout.splitlines():
-                if not line.strip() or video_count >= 5:
+                if not line.strip():
                     continue
+                    
+                # 早期退出检查
+                if consecutive_old >= max_consecutive_old:
+                    break
+                    
                 try:
                     video = json.loads(line)
                 except json.JSONDecodeError:
@@ -195,9 +218,11 @@ def _fetch_via_ytdlp(channel_id, name, cutoff_date, min_duration, include_keywor
                         video_date = datetime(int(upload_date[:4]), int(upload_date[4:6]), int(upload_date[6:8]))
                         if video_date < cutoff_date:
                             print(f"  ⏭️ 跳过 (超出日期范围): {title[:30]}... ({upload_date})")
+                            consecutive_old += 1
                             video_count += 1
                             continue
                         formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
+                        consecutive_old = 0  # 重置计数器
                     except ValueError:
                         continue
                 else:
@@ -208,7 +233,11 @@ def _fetch_via_ytdlp(channel_id, name, cutoff_date, min_duration, include_keywor
                     if not any(kw.lower() in title.lower() for kw in include_keywords):
                         continue
                 
+                # 获取时长（增强版）
                 duration = (video.get('duration') or 0) / 60
+                if duration == 0:
+                    duration = _get_video_duration(v_id)
+                    
                 if duration < min_duration:
                     print(f"  ⏭️ 跳过 (时长不足): {title[:30]}... ({round(duration, 1)} 分钟)")
                     video_count += 1
@@ -236,16 +265,34 @@ def _fetch_via_ytdlp(channel_id, name, cutoff_date, min_duration, include_keywor
     return items
 
 def _get_video_duration(video_id):
-    """获取单个视频的时长（分钟）"""
+    """获取单个视频的时长（分钟），带重试和备选方案"""
+    # 方法 1: yt-dlp --print duration
     try:
         result = subprocess.run(
             ['yt-dlp', '--quiet', '--print', 'duration', f'https://www.youtube.com/watch?v={video_id}'],
             capture_output=True, text=True, timeout=30
         )
-        duration_sec = int(result.stdout.strip()) if result.stdout.strip().isdigit() else 0
-        return duration_sec / 60
+        if result.stdout.strip().isdigit():
+            return int(result.stdout.strip()) / 60
     except:
-        return 0
+        pass
+    
+    # 方法 2: yt-dlp -J 获取完整 JSON
+    try:
+        result = subprocess.run(
+            ['yt-dlp', '--quiet', '-J', f'https://www.youtube.com/watch?v={video_id}'],
+            capture_output=True, text=True, timeout=45
+        )
+        if result.stdout.strip():
+            data = json.loads(result.stdout)
+            duration_sec = data.get('duration', 0)
+            if duration_sec:
+                return duration_sec / 60
+    except:
+        pass
+    
+    print(f"  ⚠️ 无法获取视频 {video_id} 的时长")
+    return 0
 
 def fetch_xiaoyuzhou_feed(podcast_id, name, min_duration, days, include_keywords, state):
     print(f"正在扫描小宇宙: {name}")
@@ -360,7 +407,8 @@ def main():
 
     print(f"\n发现 {len(final_items)} 条新内容:")
     for i, item in enumerate(final_items):
-        print(f"{i+1}. [{item['platform'].upper()}] {item['channel']} - {item['title']}")
+        print(f"{i+1}. [{item['platform'].upper()}] {item['channel']} - {item['title']} ({item['date']})")
+        print(f"   URL: {item['url']}")
     
     return final_items
 
