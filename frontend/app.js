@@ -496,7 +496,7 @@ function formatContent(text) {
         }
       }
       tableHtml += '</tbody></table>';
-      html += tableHtml;
+      html += '<div class="table-wrapper">' + tableHtml + '</div>';
       tableRows = [];
       inTable = false;
     }

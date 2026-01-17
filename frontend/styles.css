@@ -1339,13 +1339,18 @@ body {
     line-height: 1.9;
   }
 
-  /* Scrollable tables on mobile with min-width */
-  .content-table {
-    display: block;
+  /* Scrollable tables on mobile */
+  .table-wrapper {
+    width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    margin: 24px 0;
+  }
+
+  .content-table {
     min-width: 500px;
     font-size: 13px;
+    margin: 0;
   }
 
   .content-table th,
