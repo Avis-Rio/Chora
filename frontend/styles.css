@@ -1319,10 +1319,13 @@ body {
 
   .reader-body {
     padding: 16px;
+    flex-direction: column;
+    gap: 0;
   }
 
   .reader-main {
     max-width: 100%;
+    width: 100%;
     overflow-x: hidden;
   }
 
