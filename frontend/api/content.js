@@ -71,8 +71,14 @@ module.exports = async function handler(req, res) {
 
         const items = recordsData.data?.items || [];
 
+        // Filter: only include records where '是否发布' is true
+        const publishedItems = items.filter(record => {
+            const isPublished = record.fields?.['是否发布'];
+            return isPublished === true;
+        });
+
         // Step 3: Transform data for frontend
-        const frontendData = items.map(record => {
+        const frontendData = publishedItems.map(record => {
             const fields = record.fields || {};
 
             // Extract cover URL from attachment field - use proxy for Feishu images
