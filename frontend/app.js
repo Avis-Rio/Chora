@@ -269,6 +269,39 @@ function renderGrid() {
       </div>
     </div>
   `}).join('');
+
+  // Setup mobile card observer after rendering
+  setupMobileCardObserver();
+}
+
+// =====================================================
+// Mobile Card Highlight (Intersection Observer)
+// =====================================================
+function setupMobileCardObserver() {
+  // Only enable on touch devices / mobile
+  if (window.innerWidth > 768) return;
+
+  const cards = document.querySelectorAll('.article-item');
+  if (!cards.length) return;
+
+  const observerOptions = {
+    root: null, // viewport
+    rootMargin: '-30% 0px -30% 0px', // Trigger when card is in middle 40% of screen
+    threshold: 0.5 // 50% of card visible
+  };
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        // Remove active from all cards first
+        cards.forEach(card => card.classList.remove('active'));
+        // Add active to current card
+        entry.target.classList.add('active');
+      }
+    });
+  }, observerOptions);
+
+  cards.forEach(card => observer.observe(card));
 }
 
 // =====================================================

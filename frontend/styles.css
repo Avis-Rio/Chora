@@ -365,7 +365,8 @@ body {
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.article-item:hover .article-image-wrapper {
+.article-item:hover .article-image-wrapper,
+.article-item.active .article-image-wrapper {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
   /* Deeper shadow on hover */
   border-color: #000;
@@ -380,7 +381,8 @@ body {
   transition: filter 0.4s ease, transform 0.5s ease;
 }
 
-.article-item:hover .article-image {
+.article-item:hover .article-image,
+.article-item.active .article-image {
   filter: grayscale(0%) contrast(100%);
   transform: scale(1.02);
 }
@@ -404,7 +406,8 @@ body {
   pointer-events: none;
 }
 
-.article-item:hover .image-overlay {
+.article-item:hover .image-overlay,
+.article-item.active .image-overlay {
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
