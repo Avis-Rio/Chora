@@ -114,6 +114,12 @@ body {
 .logo-icon {
   font-weight: 900;
   font-size: 28px;
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.3s ease;
+}
+
+.logo:hover .logo-icon {
+  transform: rotate(180deg);
+  color: #E86A33;
 }
 
 
