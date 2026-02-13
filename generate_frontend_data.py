@@ -58,7 +58,7 @@ def generate_frontend_data(
             'tags': item.get('tags', []),
             'excerpt': excerpt,
             'rewritten': item.get('rewritten', ''),
-            'quotes': item.get('quotes', []),
+            'quotes': [q.lstrip('> \t　') for q in item.get('quotes', [])],
             'guests': item.get('guests', ''),
             'url': item.get('source_url', '') or item.get('url', ''),
             'score': item.get('score', 0)

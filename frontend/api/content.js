@@ -127,7 +127,7 @@ module.exports = async function handler(req, res) {
                 cover_url: coverUrl,
                 tags: tags,
                 rewritten: fields['正文'] || '',
-                quotes: parseQuotes(fields['金句'] || ''),
+                quotes: parseQuotes(fields['金句渲染'] || fields['金句'] || ''),
                 guests: fields['嘉宾'] || '',
                 url: fields['原始链接']?.link || fields['原始链接'] || '',
                 score: fields['评分'] || 0
@@ -156,6 +156,7 @@ function parseQuotes(quotesText) {
 
     // Remove leading markers like "- " or "* " or numbers
     return lines.map(line => {
-        return line.replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+        // Remove leading markers: > (half/full), -, *, digits
+        return line.replace(/^[\s>＞]+/, '').replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
     }).filter(q => q.length > 0);
 }
