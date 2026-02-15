@@ -53,29 +53,55 @@ module.exports = async function handler(req, res) {
 
         const accessToken = tokenData.tenant_access_token;
 
-        // Step 2: Fetch records from Bitable
-        const recordsUrl = `https://open.feishu.cn/open-apis/bitable/v1/apps/${BASE_ID}/tables/${TABLE_ID}/records?page_size=100`;
+        // Step 2: Fetch records from Bitable with pagination
+        let allItems = [];
+        let pageToken = null;
+        let hasMore = true;
 
-        const recordsResponse = await fetch(recordsUrl, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
+        while (hasMore) {
+            // Build URL with pagination and sorting
+            let recordsUrl = `https://open.feishu.cn/open-apis/bitable/v1/apps/${BASE_ID}/tables/${TABLE_ID}/records?page_size=500`;
+
+            // Add sort parameter to sort by publish date descending
+            const sortParam = encodeURIComponent(JSON.stringify([{"field_name":"发布时间","desc":true}]));
+            recordsUrl += `&sort=${sortParam}`;
+
+            // Add page token if exists
+            if (pageToken) {
+                recordsUrl += `&page_token=${pageToken}`;
             }
-        });
 
-        const recordsData = await recordsResponse.json();
-        if (recordsData.code !== 0) {
-            return res.status(500).json({ error: 'Failed to fetch records', details: recordsData });
+            const recordsResponse = await fetch(recordsUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const recordsData = await recordsResponse.json();
+            if (recordsData.code !== 0) {
+                return res.status(500).json({ error: 'Failed to fetch records', details: recordsData });
+            }
+
+            const items = recordsData.data?.items || [];
+            allItems = allItems.concat(items);
+
+            // Check if there are more pages
+            hasMore = recordsData.data?.has_more || false;
+            pageToken = recordsData.data?.page_token || null;
         }
 
-        const items = recordsData.data?.items || [];
+        console.log(`Fetched ${allItems.length} total records from Feishu`);
+        const items = allItems;
 
         // Filter: only include records where '是否发布' is true
         const publishedItems = items.filter(record => {
             const isPublished = record.fields?.['是否发布'];
             return isPublished === true;
         });
+
+        console.log(`Filtered to ${publishedItems.length} published records`);
 
         // Step 3: Transform data for frontend
         const frontendData = publishedItems.map(record => {
