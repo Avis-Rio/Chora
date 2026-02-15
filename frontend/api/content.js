@@ -169,16 +169,37 @@ module.exports = async function handler(req, res) {
     }
 };
 
-// Parse quotes from text field
+// Parse quotes from text field or array
 function parseQuotes(quotesText) {
     if (!quotesText) return [];
 
-    // Split by newlines and filter empty lines
-    const lines = quotesText.split('\n').filter(line => line.trim());
+    // Handle array type (Feishu might return array)
+    if (Array.isArray(quotesText)) {
+        return quotesText.map(item => {
+            // If array item is object, try to get text property
+            const text = typeof item === 'string' ? item : (item.text || item.content || String(item));
+            return text.replace(/^[\s>＞]+/, '').replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+        }).filter(q => q.length > 0);
+    }
 
-    // Remove leading markers like "- " or "* " or numbers
-    return lines.map(line => {
-        // Remove leading markers: > (half/full), -, *, digits
-        return line.replace(/^[\s>＞]+/, '').replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
-    }).filter(q => q.length > 0);
+    // Handle string type
+    if (typeof quotesText === 'string') {
+        // Split by newlines and filter empty lines
+        const lines = quotesText.split('\n').filter(line => line.trim());
+
+        // Remove leading markers like "- " or "* " or numbers
+        return lines.map(line => {
+            // Remove leading markers: > (half/full), -, *, digits
+            return line.replace(/^[\s>＞]+/, '').replace(/^[-*•]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+        }).filter(q => q.length > 0);
+    }
+
+    // Handle other types - try to convert to string
+    try {
+        const text = String(quotesText);
+        return text ? [text.trim()] : [];
+    } catch (e) {
+        console.error('Failed to parse quotes:', e);
+        return [];
+    }
 }
