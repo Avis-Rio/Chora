@@ -59,12 +59,8 @@ module.exports = async function handler(req, res) {
         let hasMore = true;
 
         while (hasMore) {
-            // Build URL with pagination and sorting
+            // Build URL with pagination
             let recordsUrl = `https://open.feishu.cn/open-apis/bitable/v1/apps/${BASE_ID}/tables/${TABLE_ID}/records?page_size=500`;
-
-            // Add sort parameter to sort by publish date descending
-            const sortParam = encodeURIComponent(JSON.stringify([{"field_name":"发布时间","desc":true}]));
-            recordsUrl += `&sort=${sortParam}`;
 
             // Add page token if exists
             if (pageToken) {
