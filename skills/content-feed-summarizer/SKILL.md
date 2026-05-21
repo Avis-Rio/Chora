@@ -90,6 +90,74 @@ license: MIT
 ### 步骤 5：状态更新
 - 将该内容的 ID 写入 `config/state.yaml` 的 `processed_ids` 列表中。
 
+### 步骤 6：内容分发（可选）
+
+**前置条件**: 步骤 5 完成，且 `distribution.enabled: true`
+
+**配置文件**: `skills/content-feed-summarizer/distribution-config.yaml`
+
+**流程**:
+
+1. **读取配置**: 加载 `distribution-config.yaml`
+2. **检查开关**: 确认各平台是否启用
+3. **提取内容**: 从 `rewritten.md` 和 `metadata.md` 提取所需内容
+4. **小红书分发**（如启用）:
+   - 提取核心洞察 + 哲思结语
+   - 根据内容标签自动选择风格
+   - 调用 `/baoyu-xhs-images` 生成卡片
+   - 输出到 `distribution/xhs/`
+5. **微信公众号分发**（如启用）:
+   - 提取深度改写 + 书单推荐
+   - 生成 Markdown 文档
+   - 添加回流链接和公众号引导
+   - 输出到 `distribution/wechat/article.md`
+6. **输出报告**: 显示生成的文件路径
+
+**输出目录结构**:
+```
+content_archive/{article}/
+└── distribution/
+    ├── xhs/
+    │   ├── 01-cover.png
+    │   ├── 02-insight.png
+    │   └── ...
+    └── wechat/
+        └── article.md
+```
+
+**错误处理**:
+- 分发失败不阻塞主流程
+- 记录错误到日志
+- 继续处理下一个平台
+
+**手动触发**:
+```bash
+# 单独运行内容分发
+python3 -c "
+import sys
+sys.path.insert(0, 'skills/content-feed-summarizer/distribution')
+from config_loader import load_config
+from content_extractor import ContentExtractor
+from xhs_generator import XHSGenerator
+from wechat_generator import WeChatGenerator
+
+config = load_config()
+article_dir = 'content_archive/YYYY-MM-DD/xxx'
+
+extractor = ContentExtractor(article_dir)
+content = extractor.extract()
+
+# 小红书
+xhs = XHSGenerator(config, article_dir)
+print(xhs.get_generation_prompt(content))
+
+# 公众号
+wc = WeChatGenerator(config, article_dir)
+result = wc.generate(content)
+print(f'公众号文章: {result.markdown_path}')
+"
+```
+
 ---
 
 ## 🔧 完整性验证与修复工具
