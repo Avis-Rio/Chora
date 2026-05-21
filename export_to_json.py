@@ -64,12 +64,22 @@ def extract_metadata(metadata_path):
     quotes_section = re.search(r'##\s+金句\s*\n(.+?)(?=\n##|\Z)', content, re.DOTALL)
     if quotes_section:
         section_content = quotes_section.group(1)
-        # Extract lines starting with >
-        quotes = re.findall(r'>\s*(.+)', section_content)
-        # Filter out markdown headers if any slipped in
-        quotes = [q for q in quotes if not q.strip().startswith('#')]
+        # Extract lines starting with > (handle multi-line blockquotes)
+        raw_quotes = re.findall(r'>\s*(.+)', section_content)
+        # Filter out markdown headers and empty lines that slipped in
+        quotes = []
+        for q in raw_quotes:
+            # Skip markdown headers
+            if q.strip().startswith('#'):
+                continue
+            # Remove any leading > symbols (for nested quotes like "> > text")
+            cleaned = re.sub(r'^[>\s]+', '', q).strip()
+            if cleaned:
+                quotes.append(cleaned)
         if quotes:
-            metadata['quotes'] = quotes
+            # Join quotes with newlines and add blockquote marker for each paragraph
+            # This ensures they appear as distinct blockquotes in markdown renderers
+            metadata['quotes'] = '\n\n'.join([f"> {q}" for q in quotes])
     
     return metadata
 

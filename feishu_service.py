@@ -267,8 +267,8 @@ class FeishuService:
         if data.get('guests'):
             all_fields["嘉宾"] = data['guests']
         if data.get('quotes'):
-            # Join quotes with newlines, each as blockquote
-            all_fields["金句"] = '\n'.join([f'> {q}' for q in data['quotes'][:5]])
+            # data['quotes'] is already a pre-formatted string with newlines and blockquotes
+            all_fields["金句渲染"] = data['quotes']
         
         # Transcript field (原文逐字稿)
         if data.get('transcript'):
@@ -317,7 +317,7 @@ class FeishuService:
         return fields
     
     # Key fields that must have data for a record to be considered complete
-    REQUIRED_FIELDS = ['标题', '正文', '封面', '标签', '发布时间', '记录ID']
+    REQUIRED_FIELDS = ['标题', '正文', '封面', '标签', '发布时间', '记录ID', '金句渲染']
     
     def is_record_complete(self, record):
         """Check if a record has all required fields filled.
@@ -417,6 +417,10 @@ class FeishuService:
                     
                     if cover_path and os.path.exists(cover_path) and has_cover_field and needs_cover:
                         file_token = self.upload_image(cover_path)
+                    elif not needs_cover and '封面' in existing.get('fields', {}):
+                        cover_obj = existing['fields']['封面']
+                        if cover_obj and isinstance(cover_obj, list) and len(cover_obj) > 0:
+                            file_token = cover_obj[0].get('file_token')
                     
                     record_id = existing.get('record_id')
                     if self.update_record(record_id, item, available_fields, file_token):

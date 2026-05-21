@@ -43,5 +43,5 @@ node_modules/
 "How to create Skills for Claude steps and examples  Claude.md"
 "Crafting a Production-Grade Claude Skill.md"
 
-# Agent files
-.agent/
+# Agent files (workflows need to be tracked for slash commands)
+# .agent/

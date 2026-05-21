@@ -1,4 +1,11 @@
 import os
+import sys
+# 确保 Python 用户安装目录和 Homebrew 目录在 PATH 中
+user_bin = os.path.expanduser('~/Library/Python/3.9/bin')
+brew_bin = '/opt/homebrew/bin'
+local_bin = '/usr/local/bin'
+os.environ['PATH'] = f'{user_bin}:{brew_bin}:{local_bin}:{os.environ.get("PATH", "")}'
+import os
 import glob
 import re
 import subprocess

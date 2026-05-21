@@ -70,7 +70,7 @@ license: MIT
 
 ### 步骤 3：AI 深度改写 (Streaming & 分离输出)
 - **输入**: 读取 `transcript.md` 和 `config/rewrite-prompt.md`。
-- **模型**: 调用 Gemini 3 Pro (通过云雾 API)。
+- **模型**: 调用 Claude Sonnet 4 (通过云雾 API)。
 - **关键处理**:
     1.  **流式传输 (Streaming)**: 使用 `streamGenerateContent` 接口以防止长文本超时。
     2.  **语言强制**: Prompt 包含指令 "若为英文，先理解再用简体中文创作"。
@@ -78,6 +78,7 @@ license: MIT
         - **`<METADATA_SECTION>`**: 包含来源、发布时间、嘉宾、金句。
         - **`<REWRITE_SECTION>`**: 包含创作说明、深度改写（2000-2500字）、核心洞察、哲思结语、推荐书单。
     4.  **过滤**: 自动过滤 Gemini 的思考过程 (`thought: true`)。
+    5.  **完整性验证**: ⚠️ **重要** - AI 改写完成后，**必须检查** `rewritten.md` 是否成功生成且文件大小 > 100 字节。若生成失败或文件为空，立即重试（最多 5 次）。
 
 ### 步骤 4：文件归档与后处理
 1.  **解析 AI 输出**:
@@ -91,6 +92,49 @@ license: MIT
 
 ---
 
+## 🔧 完整性验证与修复工具
+
+为防止批量处理时因超时导致 `rewritten.md` 缺失，提供以下工具：
+
+### 1. 完整性检查 (`utils/content_validator.py`)
+```bash
+# 检查最近 30 天的内容完整性
+python3 utils/content_validator.py
+
+# 检查所有内容
+python3 utils/content_validator.py --days 0
+
+# 只显示不完整的条目
+python3 utils/content_validator.py --only-invalid
+
+# 生成修复报告
+python3 utils/content_validator.py --report
+```
+
+### 2. 批量重写 (`batch_rewrite.py`)
+```bash
+# 扫描并处理所有缺失 rewritten.md 的内容
+python3 batch_rewrite.py
+
+# 只处理大文件 (>40KB)
+python3 batch_rewrite.py --large-only
+
+# 预览模式（不执行）
+python3 batch_rewrite.py --dry-run
+
+# 处理最近 7 天的新内容
+python3 batch_rewrite.py --days 7
+```
+
+### 3. 飞书同步前验证
+**重要**：每次同步飞书前，务必运行：
+```bash
+python3 utils/content_validator.py --fix
+```
+这会自动修复所有缺失的 `rewritten.md`。
+
+---
+
 ## ⚠️ 常见问题处理
 
 | 场景 | 处理方式 |
@@ -100,3 +144,4 @@ license: MIT
 | **元数据缺失** | `rewrite_service.py` 会尝试从 AI 输出中提取，如失败则保留默认值。 |
 | **XML 标签缺失** | 若 AI 未生成标签，系统会尝试自动清洗并保存全量输出，同时保留基本元数据。 |
 | **重复运行** | 脚本通过 ID 和文件夹双重检查跳过。 |
+| **rewritten.md 缺失** | 运行 `python3 utils/content_validator.py --fix` 自动修复 |

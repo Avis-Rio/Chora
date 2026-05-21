@@ -1,3 +1,11 @@
+import os
+import sys
+# 确保 Python 用户安装目录和 Homebrew 目录在 PATH 中
+py_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+user_bin = os.path.expanduser(f'~/Library/Python/{py_version}/bin')
+brew_bin = '/opt/homebrew/bin'
+local_bin = '/usr/local/bin'
+os.environ['PATH'] = f'{user_bin}:{brew_bin}:{local_bin}:{os.environ.get("PATH", "")}'
 """
 小宇宙播客处理器
 处理单个小宇宙播客 URL 的完整工作流
@@ -14,7 +22,7 @@ import subprocess
 import yaml
 from datetime import datetime
 from groq import Groq
-from pydub import AudioSegment
+import glob
 import rewrite_service
 from generate_cover import generate_podcast_cover
 
@@ -56,37 +64,39 @@ def get_episode_metadata(episode_id):
                 episode = next_data.get('props', {}).get('pageProps', {}).get('episode', {})
                 description = episode.get('description', '')
                 
+                # 尝试从 trial.segment 获取音频 URL (通常包含 auth_key，对于付费节目必选)
+                audio_url = episode.get('trial', {}).get('segment', '')
+                if not audio_url:
+                    # 备选：从 enclosure 获取
+                    audio_url = episode.get('enclosure', {}).get('url', '')
+                
+                # 如果还是没有，尝试从 associatedMedia 获取
+                if not audio_url:
+                     audio_url = episode.get('associatedMedia', {}).get('contentUrl', '')
+
                 # Extract guests from description
                 guests = extract_guests_from_description(description)
-                if guests:
-                    print(f"  Extracted guests: {guests[:50]}...")
-            except:
+                
+                # 提取标题和日期
+                title = episode.get('title', 'Unknown Episode')
+                pub_date_raw = episode.get('pubDate', '')
+                pub_date = pub_date_raw[:10] if pub_date_raw else datetime.now().strftime('%Y-%m-%d')
+                
+                # 提取频道名
+                channel = episode.get('podcast', {}).get('title', 'Unknown')
+
+                return {
+                    'title': title,
+                    'channel': channel,
+                    'upload_date': pub_date,
+                    'audio_url': audio_url,
+                    'episode_id': episode_id,
+                    'guests': guests,
+                    'description': description
+                }
+            except Exception as e:
+                print(f"  Warning: Failed to parse Next.js data: {e}")
                 pass
-        
-        # Extract JSON-LD data (小宇宙使用 schema:podcast-show 但包含 PodcastEpisode 数据)
-        json_match = re.search(r'<script name="schema:podcast-show" type="application/ld\+json">(.*?)</script>', html, re.DOTALL)
-        if json_match:
-            data = json.loads(json_match.group(1))
-            
-            title = data.get('name', 'Unknown Episode')
-            pub_date_raw = data.get('datePublished', '')
-            pub_date = pub_date_raw[:10] if pub_date_raw else datetime.now().strftime('%Y-%m-%d')
-            
-            # Audio URL 在 associatedMedia.contentUrl 中
-            audio_url = data.get('associatedMedia', {}).get('contentUrl', '')
-            
-            # 频道名在 partOfSeries.name 中
-            channel = data.get('partOfSeries', {}).get('name', 'Unknown')
-            
-            return {
-                'title': title,
-                'channel': channel,
-                'upload_date': pub_date,
-                'audio_url': audio_url,
-                'episode_id': episode_id,
-                'guests': guests,  # 新增嘉宾字段
-                'description': description  # 保留描述用于 AI 参考
-            }
         
         # Fallback: extract from HTML title tag
         title_match = re.search(r'<title>(.*?)</title>', html)
@@ -163,12 +173,19 @@ def download_audio(audio_url, output_path):
             audio_url
         ], capture_output=True, text=True, timeout=660)
         
-        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+        min_size = 100 * 1024  # 100KB minimum size for valid audio
+        if os.path.exists(output_path) and os.path.getsize(output_path) > min_size:
             file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
             print(f"✅ Audio downloaded: {file_size_mb:.1f} MB")
             return True
         else:
-            print(f"Download failed. stderr: {result.stderr[:200] if result.stderr else 'None'}")
+            actual_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+            print(f"❌ Download failed or file too small ({actual_size} bytes < 100KB). Likely invalid/protected source.")
+            if result.stderr:
+                print(f"stderr: {result.stderr[:200]}")
+            # Clean up invalid file
+            if os.path.exists(output_path):
+                os.remove(output_path)
             return False
     except subprocess.TimeoutExpired:
         print("Error: Download timed out after 10 minutes.")
@@ -177,34 +194,86 @@ def download_audio(audio_url, output_path):
         print(f"Error downloading audio: {e}")
         return False
 
-def split_audio(file_path, chunk_length_ms=300000):  # 5分钟一片
-    """Split audio into chunks for transcription."""
-    print("Loading audio file...")
-    audio = AudioSegment.from_file(file_path)
-    chunks = []
-    print(f"Audio duration: {len(audio)/1000/60:.2f} minutes")
-    for i in range(0, len(audio), chunk_length_ms):
-        chunk = audio[i:i + chunk_length_ms]
-        chunks.append(chunk)
-    return chunks
-
-def transcribe_chunk(client, chunk, index):
-    """Transcribe a single audio chunk using Groq Whisper."""
-    temp_filename = f"temp_chunk_{index}.mp3"
-    chunk.export(temp_filename, format="mp3")
+def split_audio(file_path, chunk_length_sec=300):  # 5分钟一片
+    """Split audio into chunks using ffmpeg."""
+    print("Splitting audio file using ffmpeg...")
+    
+    # Clean up any existing temp chunks
+    for f in glob.glob("temp_chunk_*.mp3"):
+        os.remove(f)
+        
+    output_pattern = "temp_chunk_%03d.mp3"
     
     try:
-        with open(temp_filename, "rb") as file:
-            transcription = client.audio.transcriptions.create(
-                file=(temp_filename, file.read()),
-                model="whisper-large-v3",
-                response_format="text",
-                timeout=300.0
-            )
-        return transcription
-    finally:
-        if os.path.exists(temp_filename):
-            os.remove(temp_filename)
+        # Use ffmpeg to split
+        # -i input -f segment -segment_time 300 -c:a libmp3lame -q:a 4 output_pattern
+        # Using re-encoding to ensure consistent format and avoid boundary issues, 
+        # but -c copy is faster if source is mp3. Let's use libmp3lame to be safe and standard.
+        cmd = [
+            'ffmpeg', '-i', file_path,
+            '-f', 'segment',
+            '-segment_time', str(chunk_length_sec),
+            '-c:a', 'libmp3lame',
+            '-q:a', '4',  # Reasonable quality
+            '-loglevel', 'error',
+            output_pattern
+        ]
+        
+        subprocess.run(cmd, check=True)
+        
+        # Get list of generated files
+        chunks = sorted(glob.glob("temp_chunk_*.mp3"))
+        print(f"Audio split into {len(chunks)} chunks.")
+        return chunks
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Error splitting audio: {e}")
+        return []
+
+import time
+
+def transcribe_chunk(client, chunk_filename, index):
+    """Transcribe a single audio chunk file using Groq Whisper with retry on 429."""
+    print(f"  Transcribing {chunk_filename}...")
+    max_retries = 12
+    
+    for attempt in range(max_retries):
+        try:
+            with open(chunk_filename, "rb") as file:
+                transcription = client.audio.transcriptions.create(
+                    file=(chunk_filename, file.read()),
+                    model="whisper-large-v3",
+                    response_format="text",
+                    timeout=300.0
+                )
+            return transcription
+        except Exception as e:
+            error_str = str(e).lower()
+            if "429" in error_str or "rate limit" in error_str:
+                # Default backoff
+                wait_time = 60 * (1.5 ** attempt) # Start at 60s, then 90, 135...
+                
+                # Try to parse specific wait time from Groq error message
+                # e.g. "Please try again in 2m24s" or "try again in 1m36.5s"
+                match = re.search(r'try again in (\d+)m([\d.]+)s', error_str)
+                if match:
+                    wait_time = int(match.group(1)) * 60 + float(match.group(2)) + 5
+                else:
+                    match_s = re.search(r'try again in ([\d.]+)s', error_str)
+                    if match_s:
+                        wait_time = float(match_s.group(1)) + 5
+                
+                # Cap wait time to 15 mins
+                wait_time = min(wait_time, 900)
+                
+                print(f"  ⚠️ Rate limit hit (429) on {chunk_filename}. Retrying in {wait_time:.1f}s... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"Error transcribing {chunk_filename}: {e}")
+                raise e
+    
+    raise Exception(f"Failed to transcribe {chunk_filename} after {max_retries} retries due to rate limits.")
 
 def transcribe_audio(audio_path, config):
     """Transcribe audio file using Groq Whisper API with parallel processing."""
@@ -222,30 +291,40 @@ def transcribe_audio(audio_path, config):
     print(f"Audio split into {len(chunks)} chunks.")
     
     # Parallel processing configuration
-    max_workers = 5  # Process 5 chunks in parallel
+    # Reduced workers to be less aggressive with rate limits
+    max_workers = 3  
     results = [None] * len(chunks)
     
     print(f"🚀 Starting parallel transcription with {max_workers} workers...")
     
     import concurrent.futures
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all tasks
-        future_to_index = {
-            executor.submit(transcribe_chunk, client, chunk, i): i 
-            for i, chunk in enumerate(chunks)
-        }
-        
-        # Process results as they complete
-        for future in concurrent.futures.as_completed(future_to_index):
-            index = future_to_index[future]
-            try:
-                transcript = future.result()
-                results[index] = transcript
-                print(f"  ✅ Chunk {index+1}/{len(chunks)} completed")
-            except Exception as e:
-                print(f"  ❌ Chunk {index+1}/{len(chunks)} failed: {e}")
-                results[index] = f"[Chunk {index+1} transcription failed]"
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks
+            future_to_index = {
+                executor.submit(transcribe_chunk, client, chunk, i): i 
+                for i, chunk in enumerate(chunks)
+            }
+            
+            # Process results as they complete
+            for future in concurrent.futures.as_completed(future_to_index):
+                index = future_to_index[future]
+                try:
+                    transcript = future.result()
+                    results[index] = transcript
+                    print(f"  ✅ Chunk {index+1}/{len(chunks)} completed")
+                    # Clean up the chunk file after successful processing
+                    chunk_filename = f"temp_chunk_{index:03d}.mp3"
+                    if os.path.exists(chunk_filename):
+                        os.remove(chunk_filename)
+                except Exception as e:
+                    print(f"  ❌ Chunk {index+1}/{len(chunks)} failed permanently: {e}")
+                    results[index] = f"[Chunk {index+1} transcription failed]"
+    except KeyboardInterrupt:
+        print("\nStopping transcription...")
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
     
     # Combine results in order
     full_transcript = "\n".join(filter(None, results))
@@ -362,7 +441,11 @@ def process_podcast(podcast_url):
     print("\n[5/6] Running AI Rewrite...")
     rewritten_path = os.path.join(output_dir, "rewritten.md")
     
-    success = rewrite_service.rewrite_content(transcript_path, metadata_path, rewritten_path)
+    if os.path.exists(rewritten_path):
+        print("Rewritten content already exists, skipping rewrite.")
+        success = True
+    else:
+        success = rewrite_service.rewrite_content(transcript_path, metadata_path, rewritten_path)
     
     if not success:
         print("\n❌ Rewrite failed.")
@@ -378,7 +461,8 @@ def process_podcast(podcast_url):
         cover_success = generate_podcast_cover(
             title=metadata['title'],
             channel=metadata['channel'],
-            output_path=cover_path
+            output_path=cover_path,
+            content_path=rewritten_path
         )
         if not cover_success:
             print("⚠️ Cover generation failed, but continuing...")

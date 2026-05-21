@@ -4,6 +4,7 @@ import yaml
 import json
 import re
 import requests
+import time
 from utils.word_count import update_rewritten_file
 
 def load_config():
@@ -62,6 +63,7 @@ def detect_language(text):
 
 def rewrite_content(transcript_path, metadata_path, output_path):
     print(f"Starting rewrite for {transcript_path}...")
+    rewritten_content = ""
 
     if not os.path.exists(transcript_path):
         print(f"Error: Transcript file not found: {transcript_path}")
@@ -108,85 +110,155 @@ def rewrite_content(transcript_path, metadata_path, output_path):
     ---
     """
 
-    # Gemini API Setup
     llm_config = config['api_keys']['llm']
-    # 使用 Bearer Token 认证方式（云雾API要求）
+    provider = llm_config.get('provider', 'third_party')
     base_url = llm_config['base_url']
 
-    # 切换到流式 API 端点
-    if ":generateContent" in base_url:
-        url = base_url.replace(":generateContent", ":streamGenerateContent?alt=sse")
-    else:
-        # Fallback if URL format is unexpected, append stream method
-        url = base_url.rstrip('/') + ":streamGenerateContent?alt=sse"
-
-    payload = {
-        "contents": [{
-            "role": "user",
-            "parts": [{"text": full_prompt}]
-        }],
-        "generationConfig": {
+    if provider == 'openai_compatible':
+        url = base_url
+        payload = {
+            "model": llm_config['model'],
+            "messages": [
+                {"role": "user", "content": full_prompt}
+            ],
             "temperature": 0.7,
-            "topP": 0.95,
-            "maxOutputTokens": 65536, # Further increased to prevent truncation
+            "top_p": 0.95,
+            "max_tokens": 65536,
+            "stream": True
         }
-    }
+    else:
+        if ":generateContent" in base_url:
+            url = base_url.replace(":generateContent", ":streamGenerateContent?alt=sse")
+        else:
+            url = base_url.rstrip('/') + ":streamGenerateContent?alt=sse"
+
+        payload = {
+            "contents": [{
+                "role": "user",
+                "parts": [{"text": full_prompt}]
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "topP": 0.95,
+                "maxOutputTokens": 65536,
+            }
+        }
+
+    max_retries = 5
+    retry_delay = 5
 
     try:
-        print(f"Sending streaming request to Gemini ({llm_config['model']})...")
-        print(f"URL: {url}")
+        for attempt in range(max_retries):
+            try:
+                print(f"Sending streaming request to {llm_config['model']} (Attempt {attempt + 1}/{max_retries})...")
+                print(f"URL: {url}")
 
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f"Bearer {llm_config['api_key']}"
-        }
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': f"Bearer {llm_config['api_key']}"
+                }
 
-        # 使用 requests 发送流式请求
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=120, # 连接超时120秒，读取超时由流式处理
-            stream=True
-        )
+                response = requests.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=180,
+                    stream=True
+                )
 
-        print(f"Response received with status: {response.status_code}")
+                print(f"Response received with status: {response.status_code}")
 
-        if response.status_code != 200:
-            print(f"Error: API returned status {response.status_code}")
-            print(f"Response: {response.text[:500]}")
-            return False
+                if response.status_code == 429:
+                    wait_time = retry_delay * (2 ** attempt)
+                    print(f"  ⚠️ Rate limit hit (429). Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                
+                if response.status_code != 200:
+                    print(f"Error: API returned status {response.status_code}")
+                    print(f"Response: {response.text[:500]}")
+                    # For other errors, maybe retry too if it might be transient
+                    if response.status_code in [500, 502, 503, 504]:
+                        wait_time = retry_delay * (2 ** attempt)
+                        print(f"  ⚠️ Server error ({response.status_code}). Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                    return False
 
-        # Extract text from Gemini streaming response
-        rewritten_content = ""
-        print("Receiving stream...")
+                # Extract text from streaming response
+                rewritten_content = ""
+                print("Receiving stream...")
 
-        for line in response.iter_lines():
-            if line:
-                decoded_line = line.decode('utf-8')
-                if decoded_line.startswith('data: '):
-                    json_str = decoded_line[6:] # Remove 'data: ' prefix
-                    try:
-                        chunk = json.loads(json_str)
-                        if 'candidates' in chunk and chunk['candidates']:
-                            candidate = chunk['candidates'][0]
-                            if 'content' in candidate and 'parts' in candidate['content']:
-                                for part in candidate['content']['parts']:
-                                    # 跳过 Gemini 的 thinking 内容 (thought: true)
-                                    if part.get('thought', False):
-                                        continue
-                                    if 'text' in part:
-                                        text_chunk = part['text']
-                                        rewritten_content += text_chunk
-                                        # Optional: print progress dot
-                                        print(".", end="", flush=True)
-                    except json.JSONDecodeError:
-                        pass
+                try:
+                    for line in response.iter_lines():
+                        if line:
+                            decoded_line = line.decode('utf-8')
+                            if decoded_line.startswith('data: '):
+                                json_str = decoded_line[6:]
+                                if json_str.strip() == '[DONE]':
+                                    break
+                                try:
+                                    chunk = json.loads(json_str)
+                                    if provider == 'openai_compatible':
+                                        if 'choices' in chunk and chunk['choices']:
+                                            delta = chunk['choices'][0].get('delta', {})
+                                            text_chunk = delta.get('content', '')
+                                            if text_chunk:
+                                                rewritten_content += text_chunk
+                                                print(".", end="", flush=True)
+                                    else:
+                                        if 'candidates' in chunk and chunk['candidates']:
+                                            candidate = chunk['candidates'][0]
+                                            if 'content' in candidate and 'parts' in candidate['content']:
+                                                for part in candidate['content']['parts']:
+                                                    if part.get('thought', False):
+                                                        continue
+                                                    if 'text' in part:
+                                                        text_chunk = part['text']
+                                                        rewritten_content += text_chunk
+                                                        print(".", end="", flush=True)
+                                except json.JSONDecodeError:
+                                    pass
+                    
+                    print("\nStream complete.")
 
-        print("\nStream complete.")
+                    if not rewritten_content:
+                        print(f"  ⚠️ Received empty response from Gemini on attempt {attempt + 1}.")
+                        if attempt < max_retries - 1:
+                            wait_time = retry_delay * (2 ** attempt)
+                            print(f"  Retrying in {wait_time}s...")
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            print("Error: No content generated after max retries.")
+                            return False
 
+                    # If we got meaningful content, break the retry loop
+                    break
+
+                except (requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError) as conn_e:
+                    print(f"\n  ⚠️ Connection issue during stream: {conn_e}")
+                    if attempt < max_retries - 1:
+                        wait_time = retry_delay * (2 ** attempt)
+                        print(f"  Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        print("Error: Connection issue persisted after max retries.")
+                        return False
+
+            except requests.exceptions.RequestException as req_e:
+                print(f"  ❌ API Request Error: {req_e}")
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt)
+                    print(f"  Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    return False
+        
+        # Check if we broke out of loop with content
         if not rewritten_content:
-            print("Error: No content generated.")
             return False
 
         # Content completeness validation

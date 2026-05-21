@@ -1,10 +1,18 @@
 import os
 import sys
+# 确保 Python 用户安装目录和 Homebrew 目录在 PATH 中
+user_bin = os.path.expanduser('~/Library/Python/3.9/bin')
+brew_bin = '/opt/homebrew/bin'
+local_bin = '/usr/local/bin'
+os.environ['PATH'] = f'{user_bin}:{brew_bin}:{local_bin}:{os.environ.get("PATH", "")}'
+import os
+import sys
 import argparse
 import re
 from datetime import datetime
 import youtube_service
 import rewrite_service
+import subprocess
 
 def sanitize_filename(name):
     """Sanitize string to be safe for filenames."""
@@ -94,8 +102,55 @@ def process_video(video_id_or_url):
                 f.write(transcript_text)
             print(f"Saved transcript ({len(transcript_text)} chars) to {transcript_path}")
         else:
-            print("❌ Failed to get transcript. Aborting rewrite.")
-            return
+            print("⚠️ YouTube transcript unavailable. Falling back to Whisper transcription...")
+            # Fallback: Download audio and transcribe
+            try:
+                import process_podcast
+                
+                # 1. Download audio
+                audio_path = os.path.join(output_dir, "audio.mp3")
+                print(f"Downloading audio for Whisper to {audio_path}...")
+                
+                # Use yt-dlp to download audio
+                cmd = [
+                    'yt-dlp',
+                    '-x', '--audio-format', 'mp3',
+                    '--audio-quality', '4', # Decent quality, smaller size
+                    '-o', os.path.join(output_dir, 'audio.%(ext)s'),
+                    f"https://www.youtube.com/watch?v={video_id}"
+                ]
+                
+                subprocess.run(cmd, check=True, capture_output=True)
+                
+                if os.path.exists(audio_path):
+                    config = process_podcast.load_config()
+                    transcript_text = process_podcast.transcribe_audio(audio_path, config)
+                    
+                    if transcript_text:
+                        with open(transcript_path, "w", encoding="utf-8") as f:
+                            f.write(transcript_text)
+                        print(f"✅ Saved Whisper transcript ({len(transcript_text)} chars) to {transcript_path}")
+                        
+                        # Cleanup audio file to save space
+                        # os.remove(audio_path) 
+                    else:
+                        print("❌ Whisper transcription failed.")
+                        return
+                else:
+                    print("❌ Audio download failed.")
+                    return
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Fallback failed (subprocess error): {e}")
+                if e.stderr:
+                    print(f"stderr: {e.stderr}")
+                import traceback
+                traceback.print_exc()
+                return
+            except Exception as e:
+                print(f"❌ Fallback failed: {e}")
+                import traceback
+                traceback.print_exc()
+                return
 
     # 5. Run AI Rewrite
     print("\n[5/5] Running AI Rewrite...")

@@ -3,8 +3,14 @@ import os
 import json
 import subprocess
 import re
+import sys
 from datetime import datetime, timedelta
 from youtube_service import get_youtube_transcript
+
+# 确保 Python 用户安装目录在 PATH 中
+user_bin = os.path.expanduser('~/Library/Python/3.9/bin')
+local_bin = os.path.expanduser('~/.local/bin')
+os.environ['PATH'] = f"{user_bin}:{local_bin}:{os.environ.get('PATH', '')}"
 
 # 全局路径配置
 CONFIG_PATH = 'config/sources.yaml'
@@ -45,22 +51,41 @@ def save_state(state):
         yaml.safe_dump(state, f)
 
 def get_safe_title(title):
-    return re.sub(r'[\\/*?:"<>|]', "", title).replace(" ", "_")
+    # Match process_video.py: remove invalid chars, replace spaces, truncate to 50
+    clean = re.sub(r'[\\/*?:"<>|]', "", title).replace(" ", "_")
+    return clean[:50]
 
 def is_already_processed(state, content_id):
     return content_id in state.get('processed_ids', [])
 
 def is_folder_exists(output_dir, date, platform, channel, title):
     safe_title = get_safe_title(title)
-    # 新路径结构: {date}/{platform}_{channel}_{safe_title}
+    # Sanitize channel too (handle spaces, special chars) to match folder naming convention
+    safe_channel = get_safe_title(channel)
+    
     date_dir = os.path.join(output_dir, date)
     if not os.path.exists(date_dir):
         return False
     
-    folder_prefix = f"{platform}_{channel}_"
+    # Check for folder existence
+    # Expected format: {platform}_{channel}_{title}
+    # We check if any folder contains the safe_title and starts with platform
+    # We try to match channel if possible, but relax it if strict match fails (in case config name != metadata name)
+    
+    prefix_strict = f"{platform}_{safe_channel}_"
+    
     for existing_folder in os.listdir(date_dir):
-        if existing_folder.startswith(folder_prefix) and safe_title in existing_folder:
+        # Strict match (best)
+        if existing_folder.startswith(prefix_strict) and safe_title in existing_folder:
             return True
+        
+        # Relaxed match (if channel name doesn't match perfectly but title and platform do)
+        # Only if strict match didn't find anything, we might continue loop, but we can check here.
+        if existing_folder.startswith(f"{platform}_") and safe_title in existing_folder:
+             # To be safe, maybe we rely on this? 
+             # For now, let's Stick to checking if safe_title is present in a platform folder.
+             return True
+
     return False
 
 def fetch_youtube_feed(channel_id, name, min_duration, days, include_keywords, state):
@@ -298,6 +323,7 @@ def fetch_xiaoyuzhou_feed(podcast_id, name, min_duration, days, include_keywords
     print(f"正在扫描小宇宙: {name}")
     url = f"https://www.xiaoyuzhoufm.com/podcast/{podcast_id}"
     items = []
+    cutoff_date = datetime.now() - timedelta(days=days)
     try:
         # 使用 User-Agent 避免被拦截
         headers = ['-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36']
@@ -334,6 +360,14 @@ def fetch_xiaoyuzhou_feed(podcast_id, name, min_duration, days, include_keywords
                 
                 # 格式化日期 (2026-01-02T10:22:06.258Z -> 2026-01-02)
                 formatted_date = pub_date_str[:10] if pub_date_str else datetime.now().strftime('%Y-%m-%d')
+                
+                # 日期过滤
+                try:
+                    episode_date = datetime.strptime(formatted_date, '%Y-%m-%d')
+                    if episode_date < cutoff_date:
+                        continue # 跳过超出日期范围的内容
+                except ValueError:
+                    pass
                 
                 # 关键词过滤
                 if include_keywords:
