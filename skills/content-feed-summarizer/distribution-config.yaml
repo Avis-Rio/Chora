@@ -1,0 +1,54 @@
+# 内容分发配置
+# 路径: skills/content-feed-summarizer/distribution-config.yaml
+
+distribution:
+  # 全局开关
+  enabled: true
+
+  # 小红书配置
+  xiaohongshu:
+    enabled: true
+    # 内容选择
+    content:
+      - insights    # 核心洞察
+      - ending      # 哲思结语
+    # 视觉风格：auto 表示根据内容标签自动适配
+    style: auto
+    # 布局配置
+    layout:
+      insights: dense
+      ending: sparse
+    # 图片数量限制
+    max_images: 6
+
+  # 微信公众号配置
+  wechat:
+    enabled: true
+    # 内容选择
+    content:
+      - rewrite     # 深度改写
+      - booklist    # 书单推荐
+    # 回流配置
+    backlinks:
+      chora_site: true
+      wechat_account: "Rhizomata"
+
+  # 回流链接配置
+  backlinks:
+    # Chora 网站基础 URL（需根据实际部署修改）
+    chora_base_url: "https://chora.limyai.com"
+    # 公众号引导语
+    wechat_guide: |
+      关注公众号「Rhizomata」，获取更多深度内容。
+
+  # 风格映射规则（内容标签 → 小红书风格）
+  style_mapping:
+    Philosophy: notion
+    Sociology: notion
+    Psychology: notion
+    Technology: minimal
+    Economics: minimal
+    History: chalkboard
+    Anthropology: chalkboard
+    "Art & Aesthetics": warm
+    default: notion
