@@ -1,0 +1,31 @@
+id: chora-editorial
+name: Chora Editorial
+best_for:
+  - Philosophy
+  - Technology
+  - Sociology
+  - Economics
+typography:
+  title_font: Huiwen Mincho
+  body_font: Noto Sans SC
+  title_layout:
+    - vertical
+    - asymmetrical
+color:
+  base:
+    - "#F4EFE6"
+    - "#191713"
+  accents:
+    - "#D75A2A"
+    - "#2D6A73"
+layout:
+  grid: 12-column
+  margin: generous
+  asymmetry: high
+texture:
+  paper_grain: true
+  ink_bleed: subtle
+avoid:
+  - large rounded cards
+  - generic icons
+  - decorative blobs

@@ -1,0 +1,30 @@
+id: techno-critical
+name: Techno Critical
+best_for:
+  - Technology
+  - Economics
+  - STS
+typography:
+  title_font: Noto Sans SC
+  body_font: Inter
+  title_layout:
+    - asymmetrical
+    - split-axis
+color:
+  base:
+    - "#111314"
+    - "#E7ECE8"
+  accents:
+    - "#69C9D0"
+    - "#D6B35A"
+layout:
+  grid: 12-column
+  margin: controlled
+  asymmetry: medium
+texture:
+  paper_grain: false
+  scan_noise: subtle
+avoid:
+  - generic SaaS illustration
+  - neon gradient background
+  - token coin icon

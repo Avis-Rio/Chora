@@ -1,0 +1,30 @@
+id: literary-poster
+name: Literary Poster
+best_for:
+  - Philosophy
+  - History
+  - Art & Aesthetics
+typography:
+  title_font: Huiwen Mincho
+  body_font: Noto Serif SC
+  title_layout:
+    - centered-fragment
+    - vertical
+color:
+  base:
+    - "#EFE7D5"
+    - "#27201A"
+  accents:
+    - "#8F2F24"
+    - "#536B4D"
+layout:
+  grid: manuscript
+  margin: generous
+  asymmetry: low
+texture:
+  paper_grain: true
+  ink_bleed: medium
+avoid:
+  - glossy 3d
+  - flat emoji icons
+  - soft rounded cards

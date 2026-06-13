@@ -37,6 +37,7 @@ frontend/public/covers/
 
 # Node
 node_modules/
+.ms-playwright/
 .vercel/
 
 # Skill docs (reference only)
