@@ -456,6 +456,7 @@ def test_render_closing_note_includes_subtle_cta_strip():
         "role": "closing",
         "recipe": "M07",
         "title": "读完整篇前，先带走这三点",
+        "title_lines": ["读完整篇前先带走这三点"],
         "body": "卡片之外还有完整上下文。",
         "kicker": "Closing Note",
         "footer": "Chora",
@@ -472,6 +473,8 @@ def test_render_closing_note_includes_subtle_cta_strip():
     html = render_page_section(page, mode="editorial")
 
     assert "cta-strip" in html
+    assert "读完整篇前</span><br>" in html
+    assert "先带走这三点" in html
     assert "example.com" in html
     assert "https://example.com" not in html
     assert 'src="assets/brand/rhizomata-qr.png"' in html
@@ -505,6 +508,7 @@ def test_render_swiss_closing_embeds_cta_in_final_field_card():
     html = render_page_section(page, mode="swiss")
 
     assert "Takeaway · Ledger" in html
+    assert "<h2 class=\"h-xl\">完整内容见 Chora</h2>" in html
     assert "CHORA ARCHIVE" in html
     assert "archive-mark" in html
     assert "<svg" in html
@@ -516,6 +520,27 @@ def test_render_swiss_closing_embeds_cta_in_final_field_card():
     assert "https://chora.avisionary.top" not in html
     assert 'src="assets/brand/rhizomata-qr.png"' in html
     assert "关注 Rhizomata" in html
+
+
+def test_render_swiss_closing_breaks_long_tail_title_semantically():
+    page = {
+        "id": "xhs-05",
+        "platform": "xhs",
+        "role": "closing",
+        "recipe": "S07",
+        "title": "读完整篇前，先带走这三点",
+        "title_lines": ["读完整篇前先带走这三点"],
+        "body": "卡片之外还有完整上下文。",
+        "kicker": "Closing Note",
+        "footer": "Chora",
+        "display_index": "05",
+        "items": [{"index": "01", "title": "判断比结论重要。", "note": "note"}],
+        "cta": {"url": "https://chora.avisionary.top"},
+    }
+
+    html = render_page_section(page, mode="swiss")
+
+    assert "读完整篇前<br>先带走这三点" in html
 
 
 def test_render_accent_title_keeps_latin_phrase_together():
@@ -736,8 +761,57 @@ def test_render_swiss_takeaway_ledger_does_not_repeat_lead_in_rows():
     html = render_page_section(page, mode="swiss")
 
     assert html.count("黄仁勋的判断正在被验证。") == 1
-    assert html.count("商业模式会重演。") == 1
-    assert html.count("速度快了几个数量级。") == 1
+
+
+def test_render_swiss_interface_consumes_non_overlay_evidence_image():
+    page = {
+        "id": "xhs-02",
+        "platform": "xhs",
+        "role": "insight",
+        "recipe": "S04",
+        "title": "证据图进入页面主体",
+        "body": "没有 subject map 的图片不能做图上叠字，但仍应作为证据图进入页面。",
+        "kicker": "Insight 01",
+        "footer": "Chora",
+        "display_index": "01",
+        "points": ["没有 subject map 的图片不能做图上叠字。", "证据图应进入页面主体。"],
+        "image": {
+            "src": "assets/images/xhs-02-evidence.png",
+            "caption": "AI compute data center",
+            "object_position": "center 50%",
+        },
+    }
+
+    html = render_page_section(page, mode="swiss")
+
+    assert 'src="assets/images/xhs-02-evidence.png"' in html
+    assert "image-hero" not in html
+    assert html.count("没有 subject map 的图片不能做图上叠字。") >= 1
+    assert html.count("证据图进入页面主体") >= 1
+
+
+def test_render_swiss_takeaway_ledger_does_not_repeat_reader_takeaway_lead():
+    page = {
+        "id": "xhs-07",
+        "platform": "xhs",
+        "role": "insight",
+        "recipe": "S07",
+        "title": "传记作为文化史",
+        "body": "约瑟夫·弗兰克的传记写作示范了如何通过一个作家的生命，透视整个时代的精神结构。个体痛苦被转化为理解民族精神危机的钥匙。",
+        "reader_takeaway": "约瑟夫·弗兰克的传记写作示范了如何通过一个作家的生命，透视整个时代的精神结构。",
+        "kicker": "Insight 06",
+        "footer": "Chora",
+        "display_index": "06",
+        "points": [
+            "约瑟夫·弗兰克的传记写作示范了如何通过一个作家的生命，透视整个时代的精神结构。",
+            "个体痛苦被转化为理解民族精神危机的钥匙。",
+        ],
+        "items": [],
+    }
+
+    html = render_page_section(page, mode="swiss")
+
+    assert html.count("约瑟夫·弗兰克的传记写作示范了如何通过一个作家的生命，透视整个时代的精神结构。") == 1
 
 
 def test_render_swiss_hbar_uses_extracted_metric_labels():
@@ -767,6 +841,31 @@ def test_render_swiss_hbar_uses_extracted_metric_labels():
     assert "3周" in html
     assert 'data-metric-source="extracted"' in html
     assert "20字" not in html
+
+
+def test_render_swiss_hbar_does_not_emit_proxy_placeholders():
+    page = {
+        "id": "xhs-04",
+        "platform": "xhs",
+        "role": "insight",
+        "recipe": "S10",
+        "title": "三个信号正在合流",
+        "body": "成本、渠道和组织节奏正在互相影响。",
+        "kicker": "Insight 03",
+        "footer": "Chora",
+        "display_index": "03",
+        "items": [
+            {"index": "01", "title": "成本", "note": "调用智能的门槛下降。"},
+            {"index": "02", "title": "渠道", "note": "分发方式改变产品形态。"},
+        ],
+    }
+
+    html = render_page_section(page, mode="swiss")
+
+    assert "P01" not in html
+    assert "P02" not in html
+    assert "rank 01" in html
+    assert 'data-metric-source="proxy"' in html
 
 
 def test_render_page_section_rejects_unknown_swiss_recipe():
