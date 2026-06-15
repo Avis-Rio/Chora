@@ -649,3 +649,29 @@ python3 -m playwright install chromium
 
 ### 测试
 - 315 通过 / 1 fixture drift（S04 swiss 文案，AGENTS.md 不修）
+
+## 2026-06-15 · LLM mode 真測 + vendor 校對
+
+### LLM mode 真測（DeepSeek）
+- 通路：DeepSeek `deepseek-chat` 經 OpenAI-compatible 端點 `https://api.deepseek.com/v1/chat/completions`
+- env 三件：`CHORA_DISTRIBUTION_MODE_LLM_URL` / `KEY` / `MODEL`（model 默認 `claude-sonnet-4-20250514` 未用，實際採 `deepseek-chat`）
+- 測試 case：硅谷 101 / 失控的芬太尼（權力、金錢、數據、數量級）
+  - LLM 選 → **swiss**
+  - 啟發式 fallback → **editorial**
+  - 分歧證 LLM 真干預；DeepSeek 判結構性關鍵詞偏 swiss（合理）
+- 支援商：DeepSeek / 智譜 GLM / Kimi / 通義 / 硅基流動 — 凡 OpenAI-compatible chat completions 皆可，**不需改 Chora 代碼**
+- 註：上游 guizang **無 LLM 配置**（卡渲染純 CSS/HTML），`_select_mode_via_llm` 為 Chora 端擴展
+- key 管理：key 僅走 env，**不入文件 / 不入 commit**；本測試 key 視同洩露已 rotate
+
+### vendor 校對
+- 上游 HEAD `032782f chore: switch license from MIT-custom to AGPL-3.0`（2026-05-28）
+- 本地 vendor 版本 v0.14（2026-05-28）→ 同步日期一致
+- 同名 36 檔內容全等；缺 2 檔（`.gitignore` + `package-lock.json`，屬 vendoring 排除，VENDORING.md § 1/§ 3 已記）
+- 結構差：上游 `assets/template-*.html` ↔ 本地根目錄 `template-*.html`（vendoring 重組）
+- VENDORING.md 錯記修正：
+  - § 1/§ 2 將協議由「ISC」改「AGPL-3.0」（LICENSE 實為 AGPL-3.0）
+  - § 3 表格補 midnight-ink 主題兩補丁（`.mag-bg` opacity.66 + saturate.86 contrast.9；`.cta-qr img` invert(1) contrast(1.04)）
+  - § 5 同步日誌追加 2026-06-15 vendor 校對條目
+
+### 測試
+- 316/316 全綠（S04 fixture drift 已修）
