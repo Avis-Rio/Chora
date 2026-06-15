@@ -83,6 +83,8 @@ vendor/guizang/
 | 文件 | 本地修改 | 原因 |
 |---|---|---|
 | `template-editorial-card.html` | `.h-xl / .h-lg` 加 `white-space: pre-line; word-break: keep-all; overflow-wrap: normal;` | 让标题按 `semantic_title_lines` 输出的多行（`\n`）正确换行，避免中英文断词诡异 |
+| `template-editorial-card.html` | `[data-theme="midnight-ink"] .mag-bg` 加 `opacity: .66; filter: saturate(.86) contrast(.9);` | midnight-ink 主题：背景降饱和+对比柔化，适配深色主题 |
+| `template-editorial-card.html` | `[data-theme="midnight-ink"] .cta-qr img` 加 `filter: invert(1) contrast(1.04);` | midnight-ink 主题：QR 码图反色以保扫码对比度 |
 | `template-swiss-card.html` | `.display / .display-sm / .display-md` 加同三行 | 同上 |
 
 如需重新同步本目录，应**先**用 `git diff vendor/guizang/template-*.html` 备份本地修改；**后** rsync；**再**用 patch / apply_patch 恢复本地微调。
