@@ -873,7 +873,62 @@ If the theme is abstract (e.g., Philosophy, Language, Being), do NOT use abstrac
     return generate_cover(prompt, output_path, clean_title)
 
 
-def regenerate_missing_covers():
+def generate_podcast_cover_with_fallback(
+    title,
+    channel,
+    output_path,
+    description=None,
+    content_path=None,
+):
+    """
+    为播客生成封面图：优先使用 Gemini 生成，失败时 fallback 到 Pexels/Unsplash。
+
+    Args:
+        title: 播客标题
+        channel: 频道名称
+        output_path: 输出路径
+        description: 可选的内容描述
+        content_path: 可选的内容文件路径 (rewritten.md)
+
+    Returns:
+        bool: 是否成功生成/下载封面
+    """
+    print(f"\n🖼️  Generating cover for: {title}")
+
+    # 1. 尝试 Gemini 生成
+    success = generate_podcast_cover(
+        title=title,
+        channel=channel,
+        output_path=output_path,
+        description=description,
+        content_path=content_path,
+    )
+    if success:
+        return True
+
+    # 2. Gemini 失败，尝试 stock photo fallback
+    print("\n🔄 Gemini cover generation failed. Trying stock photo fallback...")
+
+    # 构建 fallback 描述
+    fallback_description = description or ""
+    if content_path and os.path.exists(content_path):
+        try:
+            with open(content_path, "r", encoding="utf-8") as f:
+                content_text = f.read()
+            # 取前 800 字作为搜索上下文
+            fallback_description = f"{fallback_description} {content_text[:800]}".strip()
+        except Exception:
+            pass
+
+    from stock_cover_service import download_stock_cover
+
+    return download_stock_cover(
+        title=title,
+        output_path=output_path,
+        description=fallback_description,
+        providers=("pexels", "unsplash"),
+        resize=True,
+    )
     """
     扫描 content_archive 目录，为所有缺少封面的小宇宙播客生成封面
     """

@@ -24,7 +24,7 @@ from groq import Groq
 import glob
 import rewrite_service
 from config_loader import load_sources_config
-from generate_cover import generate_podcast_cover
+from generate_cover import generate_podcast_cover_with_fallback as generate_podcast_cover
 from distribution_pipeline.automation import generate_distribution_after_rewrite
 from xiaoyuzhou_service import get_episode_metadata, extract_episode_id
 
