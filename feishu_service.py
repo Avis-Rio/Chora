@@ -18,6 +18,26 @@ from config_loader import load_feishu_config
 class FeishuService:
     """Feishu Bitable API wrapper."""
     
+    # Default field name aliases for resilient schema mapping.
+    # Each internal key maps to one or more Feishu field names to try in order.
+    DEFAULT_FIELD_ALIASES = {
+        "title": ["标题", "Title"],
+        "id": ["记录ID", "ID", "内容ID"],
+        "channel": ["频道", "Channel", "来源频道"],
+        "rewritten": ["正文", "摘要", "内容", " rewritten"],
+        "guests": ["嘉宾", "Guests", "主讲人"],
+        "quotes": ["金句渲染", "金句", "Quotes", "Highlight"],
+        "transcript": ["原文逐字稿", "Transcript", "逐字稿"],
+        "reading_time": ["阅读时长", "Reading Time", "预计阅读"],
+        "score": ["评分", "Score", "Rating"],
+        "source_url": ["原始链接", "Source URL", "原文链接", "链接"],
+        "cover": ["封面", "Cover", "配图"],
+        "publish_date": ["发布时间", "Publish Date", "日期", "发布日期"],
+        "platform": ["平台", "Platform", "来源平台"],
+        "tags": ["标签", "Tags", "Tag"],
+        "published": ["是否发布", "Published", "发布"],
+    }
+
     def __init__(self, config_path='config/feishu.yaml'):
         """Initialize with config file."""
         self.config = load_feishu_config(config_path)
@@ -25,7 +45,11 @@ class FeishuService:
             self.config = {}
         self.access_token = None
         self.token_expires = 0
-        
+
+        # Field aliases can be overridden in config
+        aliases = self.config.get('field_aliases', {})
+        self.field_aliases = {**self.DEFAULT_FIELD_ALIASES, **aliases}
+
         # Setup session with retries
         self.session = requests.Session()
         retry_strategy = Retry(
@@ -114,11 +138,12 @@ class FeishuService:
             return []
     
     def find_by_id(self, content_id):
-        """Find a record by content ID."""
+        """Find a record by content ID using field aliases."""
         records = self.list_records()
+        id_field = self._resolve_field_name('id', self.get_table_fields())[0] or '记录ID'
         for record in records:
             fields = record.get('fields', {})
-            if fields.get('记录ID') == content_id:
+            if fields.get(id_field) == content_id:
                 return record
         return None
     
@@ -166,24 +191,32 @@ class FeishuService:
             return False
     
     def get_table_fields(self):
-        """Get list of field names from the table."""
+        """Get field metadata from the table.
+
+        Returns a dict mapping field_name -> field_type (e.g. 'text', 'single_select').
+        Falls back to field-name-only list if API shape is unexpected.
+        """
         base_id = self.config.get('base_id')
         table_id = self.config.get('table_id')
         url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base_id}/tables/{table_id}/fields"
-        
+
         try:
             response = self._request("GET", url, headers=self._headers())
             result = response.json()
-            
+
             if result.get('code') == 0:
-                fields = result.get('data', {}).get('items', [])
-                return [f.get('field_name') for f in fields]
+                items = result.get('data', {}).get('items', [])
+                return {
+                    f.get('field_name'): f.get('type', 'text')
+                    for f in items
+                    if f.get('field_name')
+                }
             else:
                 print(f"⚠️ Failed to get fields: {result}")
-                return []
+                return {}
         except Exception as e:
             print(f"⚠️ Error getting fields: {e}")
-            return []
+            return {}
     
     def upload_image(self, image_path):
         """Upload image to Feishu Drive and return file_token.
@@ -237,88 +270,159 @@ class FeishuService:
                 print(f"⚠️ Upload error: {e}")
                 return None
     
+    def _resolve_field_name(self, internal_key, available_fields):
+        """Map an internal field key to the actual Feishu field name.
+
+        available_fields can be a dict (name -> type) or a set/list of names.
+        Returns (resolved_name, field_type) or (None, None).
+        """
+        if available_fields is None:
+            available_fields = {}
+        names = set(available_fields.keys()) if isinstance(available_fields, dict) else set(available_fields or [])
+        aliases = self.field_aliases.get(internal_key, [internal_key])
+        for alias in aliases:
+            if alias in names:
+                field_type = available_fields.get(alias, 'text') if isinstance(available_fields, dict) else 'text'
+                return alias, field_type
+        return None, None
+
+    def _format_field_value(self, value, field_type):
+        """Format a Python value according to Feishu Bitable field type."""
+        if value is None:
+            return None
+
+        field_type = (field_type or 'text').lower()
+
+        if field_type == 'single_select':
+            if isinstance(value, dict) and 'text' in value:
+                return value
+            return {'text': str(value)}
+
+        if field_type == 'multi_select':
+            if isinstance(value, list):
+                formatted = []
+                for item in value:
+                    if isinstance(item, dict) and 'text' in item:
+                        formatted.append(item)
+                    elif isinstance(item, str):
+                        for part in item.split(','):
+                            part = part.strip()
+                            if part:
+                                formatted.append({'text': part})
+                    else:
+                        formatted.append({'text': str(item)})
+                return formatted
+            if isinstance(value, str):
+                return [{'text': part.strip()} for part in value.split(',') if part.strip()]
+            return [{'text': str(value)}]
+
+        if field_type == 'checkbox':
+            return bool(value)
+
+        if field_type in ('url', 'link'):
+            if isinstance(value, dict) and 'link' in value:
+                return value
+            url = str(value)
+            return {'link': url, 'text': url[:50] or '链接'}
+
+        if field_type == 'attachment':
+            if isinstance(value, list):
+                return value
+            return [{'file_token': str(value)}]
+
+        if field_type == 'number':
+            try:
+                return float(value)
+            except Exception:
+                return value
+
+        if field_type in ('date', 'datetime'):
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, (int, float)):
+                return int(value)
+            if isinstance(value, str):
+                # Try common date formats and return milliseconds timestamp
+                for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%Y-%m-%d %H:%M:%S'):
+                    try:
+                        dt = datetime.strptime(value, fmt)
+                        return int(dt.timestamp() * 1000)
+                    except Exception:
+                        continue
+            return value
+
+        # Default: text / multi-line text
+        return value
+
     def _map_to_fields(self, data, available_fields=None, file_token=None):
         """Map export data to Feishu field format.
-        Only includes fields that exist in the table.
+
+        Uses field metadata (when available) to format values for the correct
+        Bitable field types, and resolves field names via aliases so that minor
+        schema renames do not break sync.
         """
-        # Build all possible fields
-        all_fields = {
-            "标题": data.get('title', ''),
+        if available_fields is None:
+            available_fields = {}
+
+        candidates = {
+            'title': data.get('title', ''),
+            'id': data.get('id'),
+            'channel': data.get('channel'),
+            'rewritten': data.get('rewritten'),
+            'guests': data.get('guests'),
+            'quotes': data.get('quotes'),
+            'transcript': data.get('transcript'),
+            'reading_time': data.get('reading_time'),
+            'score': data.get('score'),
+            'source_url': data.get('source_url'),
+            'cover': [{'file_token': file_token}] if file_token else None,
+            'publish_date': data.get('publish_date'),
+            'platform': data.get('platform'),
+            'tags': data.get('tags'),
+            'published': data.get('published', True),
         }
-        
-        # Optional text fields
-        if data.get('id'):
-            all_fields["记录ID"] = data['id']
-        if data.get('channel'):
-            all_fields["频道"] = data['channel']
-        if data.get('rewritten'):
-            all_fields["正文"] = data['rewritten']
-        
-        # Metadata fields (嘉宾, 金句)
-        if data.get('guests'):
-            all_fields["嘉宾"] = data['guests']
-        if data.get('quotes'):
-            # data['quotes'] is already a pre-formatted string with newlines and blockquotes
-            all_fields["金句渲染"] = data['quotes']
-        
-        # Transcript field (原文逐字稿)
-        if data.get('transcript'):
-            all_fields["原文逐字稿"] = data['transcript']
-        
-        # Optional number fields
-        if data.get('reading_time'):
-            all_fields["阅读时长"] = data['reading_time']
-        if data.get('score'):
-            all_fields["评分"] = data['score']
-        
-        # Handle link fields
-        if data.get('source_url'):
-            all_fields["原始链接"] = {"link": data['source_url'], "text": "查看原始内容"}
-        
-        # Handle cover as attachment (if file_token provided)
-        if file_token:
-            all_fields["封面"] = [{'file_token': file_token}]
-        
-        # Handle date field - use 发布时间 (the field name in user's table)
-        if data.get('publish_date'):
-            try:
-                dt = datetime.strptime(data['publish_date'], '%Y-%m-%d')
-                all_fields["发布时间"] = int(dt.timestamp() * 1000)
-            except:
-                pass
-        
-        # Handle single select (platform)
+
+        # Platform normalization
         platform_map = {'youtube': 'YouTube', 'xiaoyuzhou': '小宇宙'}
-        if data.get('platform'):
-            all_fields["平台"] = platform_map.get(data['platform'], data['platform'])
-        
-        # Handle multi-select (tags)
-        if data.get('tags'):
-            all_fields["标签"] = data['tags']
-        
-        # Set default publish status to True (checked)
-        all_fields["是否发布"] = True
-        
-        # Filter to only available fields if provided
-        if available_fields:
-            fields = {k: v for k, v in all_fields.items() if k in available_fields}
-        else:
-            fields = all_fields
-        
+        if candidates.get('platform'):
+            candidates['platform'] = platform_map.get(candidates['platform'], candidates['platform'])
+
+        fields = {}
+        for internal_key, raw_value in candidates.items():
+            if raw_value is None or raw_value == '':
+                continue
+            field_name, field_type = self._resolve_field_name(internal_key, available_fields)
+            if not field_name:
+                # If no schema metadata, fall back to the first alias so the
+                # caller can still attempt a write (useful for dry runs/tests).
+                aliases = self.field_aliases.get(internal_key, [internal_key])
+                field_name = aliases[0]
+                field_type = 'text'
+            formatted = self._format_field_value(raw_value, field_type)
+            if formatted is not None:
+                fields[field_name] = formatted
+
         return fields
     
-    # Key fields that must have data for a record to be considered complete
-    REQUIRED_FIELDS = ['标题', '正文', '封面', '标签', '发布时间', '记录ID', '金句渲染']
+    # Key fields that must have data for a record to be considered complete.
+    # These are internal keys; they are resolved to actual Feishu field names
+    # via field_aliases when checking completeness.
+    REQUIRED_FIELDS = ['title', 'rewritten', 'cover', 'tags', 'publish_date', 'id', 'quotes']
     
     def is_record_complete(self, record):
         """Check if a record has all required fields filled.
         
+        Uses field aliases to tolerate schema renames.
         Returns tuple: (is_complete, missing_fields)
         """
         fields = record.get('fields', {})
         missing = []
         
-        for field_name in self.REQUIRED_FIELDS:
+        for internal_key in self.REQUIRED_FIELDS:
+            field_name = self._resolve_field_name(internal_key, self.get_table_fields())[0]
+            if not field_name:
+                # Cannot resolve field; assume schema missing this concept
+                continue
             value = fields.get(field_name)
             
             # Check if field is empty
@@ -354,19 +458,21 @@ class FeishuService:
         print("🔍 Checking table fields...")
         available_fields = self.get_table_fields()
         if available_fields:
-            print(f"   Found fields: {', '.join(available_fields)}")
+            print(f"   Found fields: {', '.join(available_fields.keys())}")
         else:
             print("   ⚠️ Could not get field list, will try all fields")
-        
+
         # Check if cover field exists
-        has_cover_field = '封面' in available_fields if available_fields else True
-        
+        cover_field = self._resolve_field_name('cover', available_fields)[0]
+        has_cover_field = bool(cover_field)
+
         # Pre-fetch all records for efficiency
         print("📥 Fetching existing records...")
         all_records = self.list_records(page_size=500)
         records_by_id = {}
+        id_field = self._resolve_field_name('id', available_fields)[0] or '记录ID'
         for record in all_records:
-            content_id = record.get('fields', {}).get('记录ID')
+            content_id = record.get('fields', {}).get(id_field)
             if content_id:
                 records_by_id[content_id] = record
         print(f"   Found {len(records_by_id)} existing records")
@@ -404,15 +510,20 @@ class FeishuService:
                     # Upload cover if missing or force
                     file_token = None
                     cover_path = item.get('cover_path')
-                    needs_cover = '封面' in missing_fields or force
-                    
+                    needs_cover = cover_field in missing_fields or force
+
                     if cover_path and os.path.exists(cover_path) and has_cover_field and needs_cover:
                         file_token = self.upload_image(cover_path)
-                    elif not needs_cover and '封面' in existing.get('fields', {}):
-                        cover_obj = existing['fields']['封面']
+                    elif not needs_cover and cover_field and cover_field in existing.get('fields', {}):
+                        cover_obj = existing['fields'][cover_field]
                         if cover_obj and isinstance(cover_obj, list) and len(cover_obj) > 0:
                             file_token = cover_obj[0].get('file_token')
-                    
+
+                    # Preserve existing publish status; default to True for new records
+                    published_field = self._resolve_field_name('published', available_fields)[0]
+                    if published_field and published_field in existing.get('fields', {}):
+                        item['published'] = existing['fields'][published_field]
+
                     record_id = existing.get('record_id')
                     if self.update_record(record_id, item, available_fields, file_token):
                         updated += 1

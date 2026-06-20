@@ -91,10 +91,38 @@ module.exports = async function handler(req, res) {
         console.log(`Fetched ${allItems.length} total records from Feishu`);
         const items = allItems;
 
-        // Filter: only include records where '是否发布' is true
+        // Field name aliases for resilient schema mapping
+        const FIELD_ALIASES = {
+            published: ['是否发布', 'Published', '发布'],
+            title: ['标题', 'Title'],
+            id: ['记录ID', 'ID', '内容ID'],
+            channel: ['频道', 'Channel', '来源频道'],
+            rewritten: ['正文', '摘要', '内容'],
+            guests: ['嘉宾', 'Guests', '主讲人'],
+            quotes: ['金句渲染', '金句', 'Quotes', 'Highlight'],
+            readingTime: ['阅读时长', 'Reading Time', '预计阅读'],
+            score: ['评分', 'Score', 'Rating'],
+            sourceUrl: ['原始链接', 'Source URL', '原文链接', '链接'],
+            cover: ['封面', 'Cover', '配图'],
+            publishDate: ['发布时间', 'Publish Date', '日期', '发布日期'],
+            platform: ['平台', 'Platform', '来源平台'],
+            tags: ['标签', 'Tags', 'Tag']
+        };
+
+        function getField(fields, key) {
+            const aliases = FIELD_ALIASES[key] || [key];
+            for (const alias of aliases) {
+                if (fields[alias] !== undefined && fields[alias] !== null) {
+                    return fields[alias];
+                }
+            }
+            return undefined;
+        }
+
+        // Filter: only include records where published field is true
         const publishedItems = items.filter(record => {
-            const isPublished = record.fields?.['是否发布'];
-            return isPublished === true;
+            const isPublished = getField(record.fields || {}, 'published');
+            return isPublished === true || isPublished === 'true' || isPublished === 1;
         });
 
         console.log(`Filtered to ${publishedItems.length} published records`);
@@ -105,8 +133,9 @@ module.exports = async function handler(req, res) {
 
             // Extract cover URL from attachment field - use proxy for Feishu images
             let coverUrl = null;
-            if (fields['封面'] && Array.isArray(fields['封面']) && fields['封面'].length > 0) {
-                const originalUrl = fields['封面'][0].url || fields['封面'][0].tmp_url || null;
+            const coverField = getField(fields, 'cover');
+            if (coverField && Array.isArray(coverField) && coverField.length > 0) {
+                const originalUrl = coverField[0].url || coverField[0].tmp_url || null;
                 if (originalUrl) {
                     // Extract file token from Feishu URL and use our proxy
                     const tokenMatch = originalUrl.match(/medias\/([^\/]+)/);
@@ -120,39 +149,40 @@ module.exports = async function handler(req, res) {
 
             // Extract tags from multi-select field
             let tags = [];
-            if (fields['标签']) {
-                if (Array.isArray(fields['标签'])) {
-                    tags = fields['标签'].map(t => typeof t === 'string' ? t : t.text || t);
-                } else if (typeof fields['标签'] === 'string') {
-                    tags = fields['标签'].split(',').map(t => t.trim());
+            const tagsField = getField(fields, 'tags');
+            if (tagsField) {
+                if (Array.isArray(tagsField)) {
+                    tags = tagsField.map(t => typeof t === 'string' ? t : t.text || t);
+                } else if (typeof tagsField === 'string') {
+                    tags = tagsField.split(',').map(t => t.trim());
                 }
             }
 
             // Parse publish date
             let publishDate = '';
-            if (fields['发布时间']) {
-                const timestamp = fields['发布时间'];
-                if (typeof timestamp === 'number') {
-                    publishDate = new Date(timestamp).toISOString().split('T')[0];
+            const publishDateField = getField(fields, 'publishDate');
+            if (publishDateField) {
+                if (typeof publishDateField === 'number') {
+                    publishDate = new Date(publishDateField).toISOString().split('T')[0];
                 } else {
-                    publishDate = timestamp;
+                    publishDate = publishDateField;
                 }
             }
 
             return {
-                id: fields['记录ID'] || record.record_id,
-                title: fields['标题'] || '',
-                platform: fields['平台'] || '',
-                channel: fields['频道'] || '',
+                id: getField(fields, 'id') || record.record_id,
+                title: getField(fields, 'title') || '',
+                platform: getField(fields, 'platform') || '',
+                channel: getField(fields, 'channel') || '',
                 publish_date: publishDate,
-                reading_time: fields['阅读时长'] || 10,
+                reading_time: getField(fields, 'readingTime') || 10,
                 cover_url: coverUrl,
                 tags: tags,
-                rewritten: fields['正文'] || '',
-                quotes: parseQuotes(fields['金句渲染'] || fields['金句'] || ''),
-                guests: fields['嘉宾'] || '',
-                url: fields['原始链接']?.link || fields['原始链接'] || '',
-                score: fields['评分'] || 0
+                rewritten: getField(fields, 'rewritten') || '',
+                quotes: parseQuotes(getField(fields, 'quotes') || ''),
+                guests: getField(fields, 'guests') || '',
+                url: getField(fields, 'sourceUrl')?.link || getField(fields, 'sourceUrl') || '',
+                score: getField(fields, 'score') || 0
             };
         });
 
