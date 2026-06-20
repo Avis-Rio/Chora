@@ -45,6 +45,21 @@ def _push_unique(values: list[str], seen: set[str], value: str) -> None:
     values.append(clean)
 
 
+# Cover / lead / detail 字數上限（防渲染溢出）
+HERO_MAX_CHARS = 12      # cover hero h1 允許中文字符數
+LEAD_MAX_CHARS = 110     # hero_question / structure lead 段落
+DETAIL_MAX_CHARS = 70    # density_panel / detail 條目
+CAPTION_MAX_CHARS = 60
+
+
+def _cap_chars(text: str, limit: int) -> str:
+    """按中文字符數截斷（標點計入），保留尾部標點。"""
+    clean = str(text or "").strip()
+    if not clean or len(clean) <= limit:
+        return clean
+    return clean[:limit].rstrip("，,。.!！?？；;：:") + "…"
+
+
 def build_copy_slots(page: dict) -> dict:
     title = str(page.get("title") or "").strip()
     body = str(page.get("body") or "").strip()
@@ -67,12 +82,14 @@ def build_copy_slots(page: dict) -> dict:
             seen.add(norm_text(candidate_text))
             break
 
+    role = page.get("role", "")
+    hero_cap = HERO_MAX_CHARS if role == "cover" else 40
     return {
-        "hero": title,
-        "lead": lead,
-        "details": details,
+        "hero": _cap_chars(title, hero_cap),
+        "lead": _cap_chars(lead, LEAD_MAX_CHARS),
+        "details": [_cap_chars(d, DETAIL_MAX_CHARS) for d in details],
         "sentences": unique_sentences[:5],
-        "caption": caption,
+        "caption": _cap_chars(caption, CAPTION_MAX_CHARS),
         "meta": page.get("footer", ""),
     }
 

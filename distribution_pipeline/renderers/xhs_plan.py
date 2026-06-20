@@ -1,5 +1,7 @@
 GROWTH_DEPTH_MAX_CARDS = 10
 
+from distribution_pipeline.renderers.guizang.title_breaker import semantic_title_lines
+
 
 def _has_epilogue(epilogue: dict | None) -> bool:
     return bool(epilogue and epilogue.get("body"))
@@ -47,7 +49,7 @@ def _line_break(title: str, max_first: int = 12) -> list[str]:
             return [first, second] if second else [first]
     if len(clean) <= 14:
         return [clean]
-    return [clean[:max_first], clean[max_first: max_first + 14]]
+    return semantic_title_lines(clean, target=max_first, max_lines=2, min_tail=3)
 
 
 def _cover_hook(source: dict, insights: list[dict]) -> tuple[str, list[str], str]:

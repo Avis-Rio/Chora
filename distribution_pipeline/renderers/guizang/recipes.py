@@ -2,6 +2,8 @@ import re
 from html import escape
 
 from distribution_pipeline.renderers.guizang.content_allocator import build_copy_slots
+from distribution_pipeline.renderers.guizang.screenshot_treatment import render_image_frame as _render_image_frame
+from distribution_pipeline.renderers.guizang.title_breaker import semantic_title_lines
 
 
 SCAFFOLD_LABELS = {"注记", "脉络", "张力", "信号", "判断", "余波", "边界", "后果"}
@@ -128,6 +130,13 @@ def _source_label(text: str, limit: int = 18) -> str:
     return f"{trimmed}..."
 
 
+def _image_caption_label(value: str) -> str:
+    clean = " ".join(str(value or "").split()).strip()
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 .·/_-]{0,24}", clean):
+        return clean
+    return _source_label(clean, limit=10)
+
+
 def _visible_chips(page: dict) -> list[dict]:
     return [chip for chip in (page.get("chips") or []) if not chip.get("generated")]
 
@@ -180,6 +189,50 @@ def _accent_title(title: str) -> str:
     else:
         split_at = min(6, len(text))
     return f'<span style="color:var(--accent)">{_e(text[:split_at])}</span>{_e(text[split_at:])}'
+
+
+def _title_lines_from_value(value, target: int = 11, max_lines: int = 2) -> list[str]:
+    if isinstance(value, list):
+        lines = [str(line or "").strip() for line in value if str(line or "").strip()]
+        if lines:
+            max_width = target + 2
+            if len(lines) <= max_lines and all(len(line) <= max_width for line in lines):
+                return lines
+            return semantic_title_lines("".join(lines), target=target, max_lines=max_lines, min_tail=3)
+    if isinstance(value, str) and "\n" in value:
+        lines = [line.strip() for line in value.splitlines() if line.strip()]
+        if lines:
+            max_width = target + 2
+            if len(lines) <= max_lines and all(len(line) <= max_width for line in lines):
+                return lines
+            return semantic_title_lines("".join(lines), target=target, max_lines=max_lines, min_tail=3)
+    return semantic_title_lines(str(value or ""), target=target, max_lines=max_lines, min_tail=3)
+
+
+def _title_lines(page: dict, target: int = 11, max_lines: int = 2) -> list[str]:
+    return _title_lines_from_value(page.get("title_lines") or page.get("title", ""), target=target, max_lines=max_lines)
+
+
+def _title_plain(page: dict, target: int = 11, max_lines: int = 2) -> str:
+    return "".join(_title_lines(page, target=target, max_lines=max_lines))
+
+
+def _title_html(page: dict, target: int = 11, max_lines: int = 2, accent: bool = False) -> str:
+    lines = _title_lines(page, target=target, max_lines=max_lines)
+    if accent:
+        return "<br>".join(_accent_title(line) for line in lines)
+    return "<br>".join(_e(line) for line in lines)
+
+
+def _title_html_from_text(text: str, target: int = 11, max_lines: int = 2, accent: bool = False) -> str:
+    lines = _title_lines_from_value(text, target=target, max_lines=max_lines)
+    if accent:
+        return "<br>".join(_accent_title(line) for line in lines)
+    return "<br>".join(_e(line) for line in lines)
+
+
+def _title_plain_from_text(text: str, target: int = 11, max_lines: int = 2) -> str:
+    return "".join(_title_lines_from_value(text, target=target, max_lines=max_lines))
 
 
 def _display_number(page: dict) -> str:
@@ -317,7 +370,7 @@ def _swiss_archive_mark(page: dict) -> str:
 def _image_figure(image: dict, fig_label: str = "FIG. 01", ratio: str = "r-4x3") -> str:
     if not image.get("src"):
         return ""
-    caption = image.get("caption") or image.get("alt") or image.get("asset_id") or "Source image"
+    caption = _image_caption_label(image.get("caption") or image.get("alt") or image.get("asset_id") or "Source image")
     return f"""
         <figure class="frame-img {ratio}">
           <img src="{_e(image.get("src"))}" alt="{_e(caption)}" style="object-position:{_e(image.get("object_position", "center 50%"))}">
@@ -363,7 +416,7 @@ def _density_panel(
         f"""
             <div style="border-top:1px solid var(--line);padding-top:14px">
               <span style="display:block;font-family:var(--mono);font-size:18px;letter-spacing:.12em;color:var(--accent)">{_e(item.get("index"))}</span>
-              <span style="display:block;margin-top:10px;font-family:var(--serif-zh);font-size:30px;line-height:1.1;color:var(--ink)">{_e(_item_primary(item))}</span>
+              <span style="display:block;margin-top:8px;font-family:var(--serif-zh);font-size:20px;line-height:1.4;color:var(--ink);display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden">{_e(_item_primary(item))}</span>
             </div>"""
         for item in items
     )
@@ -399,7 +452,7 @@ def _render_editorial_cover(page: dict) -> str:
     title = "<br>".join(_e(line) for line in title_lines if str(line or "").strip())
     body = _e(page.get("body"))
     image = page.get("image") or {}
-    image_html = _image_figure(image, fig_label="FIG. 01", ratio="r-16x9")
+    image_html = _render_image_frame(image, page=page, mode=page.get("mode", "editorial"), fig_label="FIG. 01", default_ratio="r-16x9")
     inner = f"""
       <div class="content stack gap-4">
         <div class="issue-row">
@@ -426,7 +479,7 @@ def _render_field_note_photo(page: dict) -> str:
     paragraphs = _paragraphs(page.get("body", ""), limit=3)
     lead = paragraphs[0] if paragraphs else page.get("body", "")
     note = " ".join(_without_repeats(paragraphs[1:], exclude=[lead], limit=2)) or page.get("reader_takeaway", "")
-    image_html = _image_figure(image, fig_label=f"FIELD {_display_number(page)}", ratio="r-3x4")
+    image_html = _render_image_frame(image, page=page, mode=page.get("mode", "editorial"), fig_label=f"FIELD {_display_number(page)}", default_ratio="r-3x4")
     inner = f"""
       <div class="content stack gap-3">
         <div class="issue-row">
@@ -435,7 +488,7 @@ def _render_field_note_photo(page: dict) -> str:
         <div style="display:grid;grid-template-columns:5fr 4fr;gap:42px;align-items:stretch;min-height:960px">
           <div style="display:flex;flex-direction:column;justify-content:space-between">
             <div class="stack gap-3">
-              <h2 class="h-xl"{_title_style(page.get("title"), base_px=76)}>{_accent_title(page.get("title"))}</h2>
+              <h2 class="h-xl"{_title_style(_title_plain(page), base_px=76)}>{_title_html(page, accent=True)}</h2>
               <p class="lead" style="font-size:34px;line-height:1.42">{_e(lead)}</p>
             </div>
             <div class="callout" style="font-size:28px;line-height:1.35">
@@ -453,7 +506,7 @@ def _render_evidence_feature(page: dict) -> str:
     paragraphs = _paragraphs(page.get("body", ""), limit=5)
     lead = paragraphs[0] if paragraphs else page.get("body", "")
     image = page.get("image") or {}
-    image_html = _image_figure(image, fig_label=f"FIG. {str(page.get('id', 'xhs-02'))[-2:]}", ratio="r-4x3")
+    image_html = _render_image_frame(image, page=page, mode=page.get("mode", "editorial"), fig_label=f"FIG. {str(page.get('id', 'xhs-02'))[-2:]}", default_ratio="r-4x3")
     detail_items = _labelled_items(paragraphs[1:] or page.get("points", []), exclude=[lead], limit=3)
     rows = "\n".join(
         f"""
@@ -470,15 +523,16 @@ def _render_evidence_feature(page: dict) -> str:
         <div class="ledger">
 {rows}
         </div>""" if rows else ""
+    image_caption = _image_caption_label(image.get("caption") or "concept evidence")
     source_band = "" if rows else f"""
         <div class="callout" style="font-size:28px;line-height:1.25">
-          视觉线索：{_e(image.get("caption") or "concept evidence")}
+          视觉线索：{_e(image_caption)}
           <span class="callout-src">{_e(page.get("kicker", "Evidence"))}</span>
         </div>"""
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Evidence"))} · Evidence</p>
-        <h2 class="h-xl"{_title_style(page.get("title"), base_px=72)}>{_accent_title(page.get("title"))}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=72)}>{_title_html(page, accent=True)}</h2>
         <p class="lead">{_e(lead)}</p>
 {image_html}
 {_takeaway_band(page, exclude=[lead])}
@@ -501,11 +555,11 @@ def _render_checklist(page: dict) -> str:
           </div>"""
         for index, item in enumerate(items[:6], start=1)
     )
-    image_html = _image_figure(page.get("image") or {}, fig_label="MATERIAL", ratio="r-16x9")
+    image_html = _render_image_frame(page.get("image") or {}, page=page, mode=page.get("mode", "editorial"), fig_label="MATERIAL", default_ratio="r-16x9")
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Checklist"))} · Checklist</p>
-        <h2 class="h-xl"{_title_style(page.get("title"), base_px=78)}>{_accent_title(page.get("title"))}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
         <div class="ledger" style="min-height:680px;justify-content:space-between">
 {rows}
         </div>
@@ -541,7 +595,7 @@ def _render_evidence_wall(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Evidence Wall"))} · Evidence Wall</p>
-        <h2 class="h-xl"{_title_style(page.get("title"), base_px=76)}>{_accent_title(page.get("title"))}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=76)}>{_title_html(page, accent=True)}</h2>
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:34px;align-items:stretch">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
 {cells}
@@ -581,7 +635,7 @@ def _render_editorial_essay(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Insight"))}</p>
-        <h2 class="h-xl"{_title_style(page.get("title"), base_px=82)}>{_accent_title(page.get("title"))}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=82)}>{_title_html(page, accent=True)}</h2>
         <hr class="rule-accent">
 {body_html}
 {_takeaway_band(page, exclude=[lead, *body_parts])}
@@ -596,7 +650,7 @@ def _render_section_divider(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-4" style="justify-content:center;align-items:flex-start">
         <p class="kicker">{_e(page.get("kicker", "Act II · Part 2"))}</p>
-        <h1 class="h-display"{_title_style(title, base_px=108)}>{_accent_title(title)}</h1>
+        <h1 class="h-display"{_title_style(title, base_px=108)}>{_title_html_from_text(title, target=12, max_lines=3, accent=True)}</h1>
         <p class="h-sub" style="max-width:760px">{_e(subtitle)}</p>
         <hr class="rule-accent" style="width:220px;height:4px">
       </div>"""
@@ -626,6 +680,13 @@ def _before_after_blocks(page: dict) -> tuple[dict, dict]:
         before_title = match.group(1).strip()
         after_title = match.group(2).strip()
         points = _paragraphs(page.get("body", ""), limit=6)
+        # 单句 body 时，before 用否定原判断，after 用原句，避免重复
+        if len(points) == 1:
+            single = points[0]
+            return (
+                {"kicker": "Before · 误判", "title": before_title, "bullets": [f"问题不在{before_title}。"]},
+                {"kicker": "After · 真因", "title": after_title, "bullets": [single]},
+            )
         mid = max(1, len(points) // 2)
         return (
             {
@@ -643,6 +704,20 @@ def _before_after_blocks(page: dict) -> tuple[dict, dict]:
     mid = max(1, len(items) // 2)
     before_items = items[:mid]
     after_items = items[mid:] or items[:1]
+    # 单条目或全部相同时，用 title 做 before，body 做 after，避免同句重复
+    if len(items) == 1 or all(_item_primary(i) == _item_primary(items[0]) for i in items):
+        return (
+            {
+                "kicker": "Before · 旧",
+                "title": "",
+                "bullets": [str(page.get("title", "")).strip().rstrip("。！？；;") + "。"] if page.get("title") else [_item_primary(items[0])],
+            },
+            {
+                "kicker": "After · 新",
+                "title": "",
+                "bullets": [_item_secondary(items[0]) or _item_primary(items[0])],
+            },
+        )
     return (
         {
             "kicker": "Before · 旧",
@@ -672,7 +747,7 @@ def _render_before_after(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Before · After"))}</p>
-        <h2 class="h-xl"{_title_style(page.get("title"), base_px=78)}>{_accent_title(page.get("title"))}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
         <div class="beforeafter" style="min-height:760px">
           <div class="ba-block before">
             <p class="kicker">{_e(before.get("kicker", "Before · 旧"))}</p>
@@ -713,7 +788,7 @@ def _render_image_led_cover(page: dict) -> str:
       <div class="content" style="position:relative;height:100%;color:#f5f1e8;padding:72px 80px;display:flex;flex-direction:column;z-index:1">
         <p class="kicker" style="color:#f5f1e8;opacity:.86;font-family:var(--mono);font-size:22px;letter-spacing:.22em;text-transform:uppercase;margin:0">{_e(page.get("kicker", "Cover · Image Led"))}</p>
         <div style="flex:1"></div>
-        <h1 style="font-family:var(--serif-zh);font-weight:500;font-size:96px;line-height:1.12;letter-spacing:.12em;color:#f5f1e8;margin:0 0 18px">{title}</h1>
+        <h1 style="font-family:var(--serif-zh);font-weight:500;font-size:78px;line-height:1.14;letter-spacing:.06em;color:#f5f1e8;margin:0 0 18px;max-width:100%;overflow-wrap:break-word;word-break:keep-all">{title}</h1>
         <div style="border-top:1px solid rgba(245,241,232,.35);padding-top:14px;font-family:var(--mono);font-size:19px;letter-spacing:.22em;text-transform:uppercase;color:#f5f1e8;opacity:.86">
           {_e(body)}
         </div>
@@ -732,7 +807,7 @@ def _render_atmospheric_thesis(page: dict) -> str:
         </div>
         <div style="position:absolute;right:72px;top:128px;font-family:var(--mono);font-size:220px;line-height:.8;color:rgba(var(--accent-rgb),.14);letter-spacing:0">{_e(number)}</div>
         <div class="stack gap-3" style="position:relative;z-index:1">
-          <h2 class="h-display"{_title_style(page.get("title"), base_px=82)}>{_accent_title(page.get("title"))}</h2>
+          <h2 class="h-display"{_title_style(_title_plain(page, target=12), base_px=82)}>{_title_html(page, target=12, accent=True)}</h2>
           <hr class="rule-accent" style="width:180px;height:4px">
         </div>
         <div class="callout" style="font-size:34px;line-height:1.36;max-width:820px">
@@ -752,8 +827,8 @@ def _render_hero_question(page: dict) -> str:
         <div class="stack gap-3">
           <p class="kicker">{_e(page.get("kicker", "The Question"))}</p>
           <div style="width:160px;height:10px;background:var(--accent);margin-bottom:8px"></div>
-          <h1 class="h-display"{_title_style(page.get("title"), base_px=96)}>{_accent_title(page.get("title"))}</h1>
-          <p class="lead" style="font-size:32px;line-height:1.48">{_e(body)}</p>
+          <h1 class="h-display"{_title_style(_title_plain(page, target=12), base_px=96)}>{_title_html(page, target=12, accent=True)}</h1>
+          <p class="lead" style="font-size:22px;line-height:1.55;max-height:260px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical">{_e(body)}</p>
           <hr class="rule">
           <p class="kicker">What remains after the argument.</p>
         </div>
@@ -786,7 +861,7 @@ def _render_ledger(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Ledger"))}</p>
-        <h2 class="h-xl"{_title_style(page.get("title"), base_px=78)}>{_accent_title(page.get("title"))}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
         <div class="ledger" style="min-height:{ledger_min_height}px;justify-content:space-between">
 {rows}
         </div>
@@ -814,7 +889,7 @@ def _render_sparse_marginalia(page: dict) -> str:
       <div class="content stack gap-4" style="justify-content:space-between">
         <div class="stack gap-3">
           <p class="kicker">{_e(page.get("kicker", "Marginalia"))}</p>
-          <h2 class="h-xl"{_title_style(page.get("title"), base_px=84)}>{_accent_title(page.get("title"))}</h2>
+          <h2 class="h-xl"{_title_style(_title_plain(page), base_px=84)}>{_title_html(page, accent=True)}</h2>
         </div>
         <div class="sparse-thesis" style="display:grid;grid-template-columns:7fr 3fr;gap:44px;align-items:stretch">
           <div style="min-height:500px;background:var(--paper-2);border-left:4px solid var(--accent);padding:42px 46px;display:flex;flex-direction:column;justify-content:center">
@@ -847,7 +922,7 @@ def _render_marginalia(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Marginalia"))}</p>
-        <h2 class="h-xl"{_title_style(page.get("title"), base_px=78)}>{_accent_title(page.get("title"))}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
         <div class="marginalia">
           <div>
 {body_html}
@@ -874,7 +949,7 @@ def _render_closing_note(page: dict) -> str:
       <div class="content stack gap-4" style="justify-content:space-between">
         <div class="stack gap-3">
           <p class="kicker">{_e(page.get("kicker", "Closing Note"))}</p>
-          <h1 class="h-display"{_title_style(page.get("title"), base_px=92)}>{_accent_title(page.get("title"))}</h1>
+          <h1 class="h-display"{_title_style(_title_plain_from_text(page.get("title", ""), target=8), base_px=82)}>{_title_html_from_text(page.get("title", ""), target=8, accent=True)}</h1>
           <p class="lead" style="font-size:34px;line-height:1.48;max-width:780px">{_e(page.get("body"))}</p>
         </div>
         <div class="closing-mark" style="position:relative;min-height:420px;background:var(--paper-2);border:1px solid var(--line);padding:36px 40px;overflow:hidden">
@@ -913,7 +988,7 @@ def _render_pipeline(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Structure"))}</p>
-        <h2 class="h-xl"{_title_style(page.get("title"), base_px=78)}>{_accent_title(page.get("title"))}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
         <div class="pipeline-v" style="min-height:430px;justify-content:space-between">
 {steps}
         </div>
@@ -933,7 +1008,7 @@ def _render_structure_prose(page: dict) -> str:
       <div class="content stack gap-4" style="justify-content:space-between">
         <div class="stack gap-3">
           <p class="kicker">{_e(page.get("kicker", "Structure"))}</p>
-          <h2 class="h-xl"{_title_style(page.get("title"), base_px=82)}>{_accent_title(page.get("title"))}</h2>
+          <h2 class="h-xl"{_title_style(_title_plain(page), base_px=82)}>{_title_html(page, accent=True)}</h2>
         </div>
         <div class="structure-prose" style="display:grid;grid-template-columns:7fr 3fr;gap:44px;align-items:stretch">
           <div style="min-height:520px;background:var(--paper-2);border-left:4px solid var(--accent);padding:46px 50px;display:flex;flex-direction:column;justify-content:center">
@@ -964,27 +1039,7 @@ def _swiss_shell(page: dict, inner: str, mat_class: str = "") -> str:
 
 
 def _swiss_title_lines(title: str, max_lines: int = 2) -> str:
-    clean = str(title or "").strip()
-    if not clean:
-        return ""
-    parts = []
-    current = ""
-    for char in clean:
-        if char in "，,。.!！?？：:、|｜":
-            if current.strip():
-                parts.append(current.strip())
-            current = ""
-        else:
-            current += char
-    if current.strip():
-        parts.append(current.strip())
-    if not parts:
-        parts = [clean]
-    if len(parts) >= max_lines:
-        return "<br>".join(_e(part[:14]) for part in parts[:max_lines])
-    if len(clean) > 14:
-        return "<br>".join(_e(part) for part in [clean[:14], clean[14:28]][:max_lines])
-    return _e(clean)
+    return "<br>".join(_e(line) for line in semantic_title_lines(str(title or ""), target=9, max_lines=max_lines, min_tail=3))
 
 
 def _swiss_header(page: dict, right: str | None = None) -> str:
@@ -993,6 +1048,20 @@ def _swiss_header(page: dict, right: str | None = None) -> str:
           <span>{_e(page.get("kicker", "Issue"))}</span>
           <span>{_e(right or page.get("id", ""))}</span>
         </div>"""
+
+
+def _swiss_evidence_panel(page: dict, label: str = "Evidence", min_height: int = 360) -> str:
+    image = page.get("image") or {}
+    if not image.get("src"):
+        return ""
+    caption = _image_caption_label(image.get("caption") or image.get("asset_id") or label)
+    return f"""
+        <figure class="frame-img r-4x3" style="margin:0;min-height:{min_height}px;background:var(--white);border:1px solid var(--grey-2);display:grid;grid-template-rows:1fr auto;overflow:hidden">
+          <div style="min-height:0;display:flex;align-items:center;justify-content:center;padding:var(--sp-4)">
+            <img src="{_e(image.get("src"))}" alt="{_e(caption)}" style="width:100%;height:100%;object-fit:contain;object-position:{_e(image.get("object_position", "center 50%"))}">
+          </div>
+          <figcaption class="t-meta" style="padding:var(--sp-4);border-top:1px solid var(--grey-2);color:var(--grey-4)">{_e(label)} · {_e(caption)}</figcaption>
+        </figure>"""
 
 
 def _swiss_items(page: dict, limit: int = 4) -> list[dict]:
@@ -1029,10 +1098,10 @@ def _swiss_metric_rows(page: dict, limit: int = 4, items: list[dict] | None = No
             source = token.get("source", "extracted")
         if value is None:
             value = len(_norm_text(f"{label}{note}"))
-        if not display_value:
-            display_value = f"P{index:02d}" if source != "extracted" else str(value)
         if not source:
             source = "proxy"
+        if not display_value:
+            display_value = str(value) if source == "extracted" else f"rank {index:02d}"
         rows.append(
             {
                 "index": f"{index:02d}",
@@ -1065,6 +1134,12 @@ def _swiss_stats(page: dict, limit: int = 4) -> list[dict]:
 def _render_swiss_accent_cover(page: dict) -> str:
     lines = page.get("title_lines")
     title = "<br>".join(_e(line) for line in lines) if lines else _swiss_title_lines(page.get("title"))
+    evidence = _swiss_evidence_panel(page, label="Source", min_height=360)
+    right_block = evidence or f"""
+          <div class="card-outlined" style="display:flex;flex-direction:column;justify-content:space-between">
+            <p class="t-meta">CHORA</p>
+            <p class="lead">{_e(page.get("body"))}</p>
+          </div>"""
     inner = f"""
       <div class="content stack gap-9">
 {_swiss_header(page, right=page.get("source_title", page.get("id", "")))}
@@ -1077,10 +1152,7 @@ def _render_swiss_accent_cover(page: dict) -> str:
             <p class="t-cat">SYSTEM</p>
             <p class="num-xl">{_e(page.get("display_index", "01"))}</p>
           </div>
-          <div class="card-outlined" style="display:flex;flex-direction:column;justify-content:space-between">
-            <p class="t-meta">CHORA</p>
-            <p class="lead">{_e(page.get("body"))}</p>
-          </div>
+{right_block}
         </div>
         <div class="grow"></div>
         <hr class="hr-accent">
@@ -1094,12 +1166,15 @@ def _render_swiss_two_signals(page: dict) -> str:
     before, after = _before_after_blocks(page)
     before_title = f'            <h3 class="h-md">{_e(before.get("title"))}</h3>' if before.get("title") else ""
     after_title = f'            <h3 class="h-md">{_e(after.get("title"))}</h3>' if after.get("title") else ""
+    evidence = _swiss_evidence_panel(page, min_height=430)
+    grid_min_height = 520 if evidence else 720
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">Two Signals · Comparison</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-7);min-height:920px">
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
+{evidence}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-7);min-height:{grid_min_height}px">
           <div class="card-ink" style="display:flex;flex-direction:column;justify-content:space-between">
             <p class="t-cat">{_e(before.get("kicker", "Signal A"))}</p>
 {before_title}
@@ -1119,6 +1194,7 @@ def _render_swiss_two_signals(page: dict) -> str:
 def _render_swiss_file_card(page: dict) -> str:
     props = _swiss_metric_rows(page, limit=4, items=_slot_items(page, "sentences", limit=4))
     chips = _visible_chips(page)
+    evidence = _swiss_evidence_panel(page, min_height=360)
     rows = "\n".join(
         f"""
           <div style="display:grid;grid-template-columns:160px 1fr;gap:var(--sp-6);padding:var(--sp-6) 0;border-bottom:1px solid var(--grey-2)">
@@ -1142,8 +1218,9 @@ def _render_swiss_file_card(page: dict) -> str:
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">Data Layer · File Card</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
-        <div class="card-fill" style="min-height:940px;display:grid;grid-template-rows:auto 1fr;gap:var(--sp-8)">
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
+{evidence}
+        <div class="card-fill" style="min-height:{'580' if evidence else '980'}px;display:grid;grid-template-rows:auto 1fr;gap:var(--sp-8)">
           <div style="display:flex;justify-content:space-between;align-items:start">
             <p class="num-mega">{_e(page.get("display_index", "01"))}</p>
             <p class="t-meta">SOURCE<br>OF<br>TRUTH</p>
@@ -1171,7 +1248,7 @@ def _render_swiss_interface_mock(page: dict) -> str:
                     "label": chip.get("title", "Signal"),
                     "note": chip.get("note", ""),
                     "value": len(_norm_text(chip.get("title", ""))) or 1,
-                    "display_value": f"P{len(modules) + 1:02d}",
+                    "display_value": f"rank {len(modules) + 1:02d}",
                     "source": "proxy",
                 }
             )
@@ -1191,20 +1268,29 @@ def _render_swiss_interface_mock(page: dict) -> str:
                 </div>"""
         for item in modules[:3]
     )
+    image = page.get("image") or {}
+    if image.get("src"):
+        visual_block = f"""
+              <div class="frame-shot" style="min-height:360px;background:var(--white);display:flex;align-items:center;justify-content:center;padding:var(--sp-5);border:1px solid var(--grey-2)">
+                <img src="{_e(image.get("src"))}" alt="{_e(image.get("caption") or "evidence")}" style="width:100%;height:100%;object-fit:contain;object-position:{_e(image.get("object_position", "center 50%"))}">
+              </div>"""
+    else:
+        visual_block = f"""
+{module_html}"""
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">Interface · Browser Mock</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
-        <div class="device-browser" style="min-height:920px">
-          <div class="frame-shot bg-grid inset-bal" style="min-height:880px">
-            <div class="shot-body stack gap-6" style="min-height:740px;display:flex;flex-direction:column">
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
+        <div class="device-browser" style="min-height:760px">
+          <div class="frame-shot bg-grid inset-bal" style="min-height:720px">
+            <div class="shot-body stack gap-6" style="min-height:620px;display:flex;flex-direction:column">
               <div class="card-ink">
                 <p class="t-cat">OUTPUT</p>
                 <p class="lead">{_e(_slot_text(page, "lead", page.get("body", "")))}</p>
               </div>
-{module_html}
-              <div class="card-outlined" style="margin-top:auto;min-height:210px;padding:var(--sp-6);display:grid;grid-template-columns:140px 1fr;gap:var(--sp-6);align-items:start;background:rgba(255,255,255,.86)">
+{visual_block}
+              <div class="card-outlined" style="margin-top:auto;min-height:190px;padding:var(--sp-6);display:grid;grid-template-columns:140px 1fr;gap:var(--sp-6);align-items:start;background:rgba(255,255,255,.86)">
                 <p class="num-xl" style="font-size:96px">{_e(page.get("display_index", "01"))}</p>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-5)">
 {trace_html}
@@ -1219,6 +1305,7 @@ def _render_swiss_interface_mock(page: dict) -> str:
 
 def _render_swiss_warning_rows(page: dict) -> str:
     row_items = _slot_items(page, "details", limit=3) or _slot_items(page, "sentences", limit=3)
+    evidence = _swiss_evidence_panel(page, min_height=320)
     rows = "\n".join(
         f"""
           <div style="display:grid;grid-template-columns:150px 1fr;gap:var(--sp-7);padding:var(--sp-7) 0;border-bottom:1px solid var(--grey-2)">
@@ -1234,10 +1321,11 @@ def _render_swiss_warning_rows(page: dict) -> str:
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">Trap · Warning Rows</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
         <div class="card-accent">
           <p class="h-md">{_e(_slot_text(page, "lead", page.get("body", "")))}</p>
         </div>
+{evidence}
         <div style="display:grid">
 {rows}
         </div>
@@ -1246,13 +1334,15 @@ def _render_swiss_warning_rows(page: dict) -> str:
 
 
 def _render_swiss_pipeline(page: dict) -> str:
-    items = _slot_items(page, "sentences", limit=3) or _swiss_items(page, limit=3)
+    items = (page.get("items") or [])[:3] or _slot_items(page, "sentences", limit=3) or _swiss_items(page, limit=3)
+    column_count = max(1, min(len(items), 3))
+    grid_columns = f"repeat({column_count},minmax(0,1fr))"
     steps = "\n".join(
         f"""
-          <div class="card-outlined" style="display:flex;flex-direction:column;justify-content:space-between;min-height:430px">
+          <div class="card-outlined" style="display:flex;flex-direction:column;justify-content:space-between;min-height:100%">
             <p class="num-xl">{index:02d}</p>
             <div>
-              <p class="lead">{_e(_item_primary(item))}</p>
+              <p class="lead" style="font-size:38px;line-height:1.12">{_e(_item_primary(item))}</p>
               <p class="body">{_e(_item_secondary(item))}</p>
             </div>
           </div>"""
@@ -1262,8 +1352,8 @@ def _render_swiss_pipeline(page: dict) -> str:
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">Pipeline · Architecture</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-6);min-height:520px">
+        <h2 class="h-xl">{_title_html(page, target=8, max_lines=3)}</h2>
+        <div style="display:grid;grid-template-columns:{grid_columns};gap:var(--sp-6);min-height:640px;align-items:stretch">
 {steps}
         </div>
         <p class="t-meta">{_e(_slot_text(page, "caption", page.get("footer", "")))}</p>
@@ -1273,13 +1363,19 @@ def _render_swiss_pipeline(page: dict) -> str:
 
 def _render_swiss_takeaway_ledger(page: dict) -> str:
     cta_marker = _swiss_cta_marker(page) if page.get("role") == "closing" else ""
+    lead_text = _slot_text(page, "lead", page.get("body", ""))
+    final_note = str(page.get("reader_takeaway") or "").strip()
+    lead_norm = _norm_text(lead_text)
+    final_norm = _norm_text(final_note)
+    if not final_note or (lead_norm and final_norm and (lead_norm in final_norm or final_norm in lead_norm)):
+        final_note = _slot_text(page, "caption", "把这一页当作回到全文的索引。")
     final_field = (
         _swiss_archive_mark(page)
         if cta_marker
         else f"""
           <div>
             <p class="t-meta">FINAL FIELD</p>
-            <p class="lead" style="max-width:560px">{_e(page.get("reader_takeaway") or "把这一页当作回到全文的索引。")}</p>
+            <p class="lead" style="max-width:560px">{_e(final_note)}</p>
           </div>"""
     )
     card_grid = (
@@ -1303,17 +1399,19 @@ def _render_swiss_takeaway_ledger(page: dict) -> str:
           </div>"""
         for index, item in enumerate(row_items, start=1)
     )
+    evidence = "" if page.get("role") == "closing" else _swiss_evidence_panel(page, min_height=320)
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">Takeaway · Ledger</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
-        <p class="lead">{_e(_slot_text(page, "lead", page.get("body", "")))}</p>
+        <h2 class="h-xl">{_title_html_from_text(page.get("title", ""), target=8, max_lines=2)}</h2>
+        <p class="lead">{_e(lead_text)}</p>
         <div class="card-fill" style="{card_grid}">
 {final_field}
 {cta_marker}
           <p class="num-mega">{_e(page.get("display_index", "01"))}</p>
         </div>
+{evidence}
         <div>
 {rows}
         </div>
@@ -1364,7 +1462,7 @@ def _render_swiss_image_hero(page: dict) -> str:
 {hero_media}
             <div class="hero-overlay-block">
               <p class="t-cat">Image Hero</p>
-              <h1 class="h-statement" style="font-size:92px">{_swiss_title_lines(page.get("title"))}</h1>
+              <h1 class="h-statement" style="font-size:92px">{_title_html(page, target=9, max_lines=2)}</h1>
             </div>
           </div>
           <div class="hero-stats">
@@ -1398,15 +1496,17 @@ def _render_swiss_kpi_tower(page: dict) -> str:
         for index, item in enumerate(argument_items[: (2 if extracted_stats else 4)], start=1)
     )
     cols = metric_cards + argument_cards
+    evidence = _swiss_evidence_panel(page, min_height=300)
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">KPI · Tower</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
         <div class="card-fill" style="padding:var(--sp-6);display:grid;grid-template-columns:180px 1fr;gap:var(--sp-7);align-items:start">
           <p class="t-meta">READING<br>FRAME</p>
           <p class="body">{_e(_slot_text(page, "caption", page.get("footer", "")))}</p>
         </div>
+{evidence}
         <div class="kpi-tower-row" style="height:auto;grid-template-columns:repeat(2,1fr);gap:var(--sp-5);align-items:stretch">
 {cols}
         </div>
@@ -1430,7 +1530,7 @@ def _render_swiss_hbar(page: dict) -> str:
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">H-Bar · Ranking</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
         <div class="h-bar-chart">
 {row_html}
         </div>
@@ -1440,6 +1540,7 @@ def _render_swiss_hbar(page: dict) -> str:
 
 def _render_swiss_stacked_ledger(page: dict) -> str:
     icons = ["square-stack", "book-open", "bolt", "keyboard", "coffee", "layers"]
+    items = _swiss_items(page, limit=5)
     rows = "\n".join(
         f"""
           <div class="ledger-row">
@@ -1447,15 +1548,24 @@ def _render_swiss_stacked_ledger(page: dict) -> str:
             <div class="ledger-lbl">{_e(_item_primary(item))}<span class="sub">{_e(_item_secondary(item))}</span></div>
             <i class="ledger-icn" data-lucide="{icons[(index - 1) % len(icons)]}"></i>
           </div>"""
-        for index, item in enumerate(_swiss_items(page, limit=5), start=1)
+        for index, item in enumerate(items, start=1)
     )
+    # 增加底部 stat，填补最后一 band，改善 R5 密度
+    stat_lead = _slot_text(page, "caption", page.get("footer", ""))
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">Stacked · Ledger</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
         <div class="stacked-ledger">
 {rows}
+        </div>
+        <div class="hero-stat-bottom">
+          <div>
+            <p class="t-cat">In total · 累计</p>
+            <p class="lead">{_e(stat_lead)}</p>
+          </div>
+          <p class="num-mega">{len(items)}</p>
         </div>
       </div>"""
     return _swiss_shell(page, inner)
@@ -1463,16 +1573,23 @@ def _render_swiss_stacked_ledger(page: dict) -> str:
 
 def _render_swiss_matrix(page: dict) -> str:
     cta_marker = _swiss_cta_marker(page) if page.get("role") == "closing" else ""
-    hero_stat_style = (
-        ' style="grid-template-columns:1fr auto auto"'
+    archive_panel = (
+        f"""
+        <div class="card-fill" style="min-height:320px;display:grid;grid-template-columns:minmax(0,1fr) 260px;align-items:center;gap:var(--sp-8)">
+{_swiss_archive_mark(page)}
+{cta_marker}
+        </div>"""
         if cta_marker
         else ""
     )
+    closing_grow = '<div class="grow"></div>' if page.get("role") == "closing" else ""
+    hero_stat_style = ""
     items = _slot_items(page, "sentences", limit=8) or _swiss_items(page, limit=8)
     matrix_style = ' style="grid-template-columns:1fr;grid-auto-rows:min-content"' if len(items) <= 3 else ""
+    cell_min_height = 220 if len(items) <= 3 else 300 if len(items) <= 4 else 160
     cells = "\n".join(
         f"""
-          <div class="matrix-cell{' is-accent' if index == 1 else ''}" style="min-height:{'168' if len(items) <= 3 else '160'}px">
+          <div class="matrix-cell{' is-accent' if index == 1 else ''}" style="min-height:{cell_min_height}px">
             <p class="cell-nb">{index:02d}</p>
             <p class="cell-title">{_e(_item_primary(item))}</p>
             <p class="body" style="font-size:24px;line-height:1.34;margin:0;color:{'var(--accent-on)' if index == 1 else 'var(--ink)'}">{_e(_item_secondary(item))}</p>
@@ -1483,17 +1600,74 @@ def _render_swiss_matrix(page: dict) -> str:
       <div class="content stack gap-7">
 {_swiss_header(page)}
         <p class="t-cat">Matrix · Hero Stat</p>
-        <h2 class="h-xl">{_e(page.get("title"))}</h2>
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
         <div class="matrix-fill"{matrix_style}>
 {cells}
         </div>
+{archive_panel}
+{closing_grow}
         <div class="hero-stat-bottom"{hero_stat_style}>
           <div>
             <p class="t-cat">In total · 累计</p>
             <p class="lead">{_e(_slot_text(page, "caption", page.get("footer", "")))}</p>
           </div>
-{cta_marker}
           <p class="num-mega">{len(items)}</p>
+        </div>
+      </div>"""
+    return _swiss_shell(page, inner)
+
+
+def _render_swiss_map_route(page: dict) -> str:
+    nodes = page.get("map_nodes") or []
+    route = page.get("map_route") or {}
+    origin = route.get("origin") or (nodes[0].get("label") if nodes else "A")
+    destination = route.get("destination") or (nodes[-1].get("label") if nodes else "B")
+    stops = route.get("stops") or [n.get("label") for n in nodes[1:-1]]
+    # 构建抽象地图节点 HTML
+    node_html = "\n".join(
+        f"""
+          <div class="map-node" style="display:flex;flex-direction:column;align-items:center;gap:10px">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);border:4px solid var(--white);box-shadow:0 0 0 2px var(--accent)"></div>
+            <p class="t-meta" style="text-transform:none;letter-spacing:0">{_e(n.get('label', ''))}</p>
+          </div>"""
+        for n in nodes
+    )
+    route_line = """
+          <div style="position:absolute;top:11px;left:0;right:0;height:2px;background:var(--accent);opacity:.4;z-index:0"></div>"""
+    stops_html = " · ".join(_e(s) for s in stops) if stops else "直接连接"
+    inner = f"""
+      <div class="content stack gap-7">
+{_swiss_header(page)}
+        <p class="t-cat">Map · Route</p>
+        <h2 class="h-xl">{_title_html(page, target=9, max_lines=2)}</h2>
+        <p class="lead">{_e(_slot_text(page, "lead", page.get("body", "")))}</p>
+        <div class="card-fill" style="min-height:520px;display:flex;flex-direction:column;justify-content:center;gap:var(--sp-8);padding:var(--sp-8)">
+          <div style="position:relative;display:flex;justify-content:space-between;align-items:flex-start;padding:0 var(--sp-6)">
+{route_line}
+{node_html}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:var(--sp-6);align-items:center;margin-top:var(--sp-6)">
+            <div style="text-align:right">
+              <p class="t-meta">ORIGIN</p>
+              <p class="lead" style="margin:0">{_e(origin)}</p>
+            </div>
+            <p class="t-cat" style="margin:0">→</p>
+            <div>
+              <p class="t-meta">DESTINATION</p>
+              <p class="lead" style="margin:0">{_e(destination)}</p>
+            </div>
+          </div>
+          <div style="border-top:1px solid var(--grey-2);padding-top:var(--sp-6);margin-top:auto">
+            <p class="t-meta">STOPS</p>
+            <p class="body">{_e(stops_html)}</p>
+          </div>
+        </div>
+        <div class="hero-stat-bottom">
+          <div>
+            <p class="t-cat">In total · 累计</p>
+            <p class="lead">{_e(_slot_text(page, "caption", page.get("footer", "")))}</p>
+          </div>
+          <p class="num-mega">{len(nodes)}</p>
         </div>
       </div>"""
     return _swiss_shell(page, inner)
@@ -1512,6 +1686,7 @@ SWISS_RENDERERS = {
     "S10": _render_swiss_hbar,
     "S11": _render_swiss_stacked_ledger,
     "S12": _render_swiss_matrix,
+    "S13": _render_swiss_map_route,
 }
 
 

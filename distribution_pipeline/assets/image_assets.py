@@ -8,6 +8,13 @@ from html import escape
 from pathlib import Path
 from urllib.parse import quote_plus
 
+from distribution_pipeline.assets.ai_image.gateway import (
+    AI_MAX_PER_PACKAGE,
+    is_ai_disabled,
+    lookup_cache,
+    remember_in_cache,
+    should_generate_via_ai,
+)
 from distribution_pipeline.assets.downloader import download_candidate, inspect_image_bytes
 from distribution_pipeline.assets.providers import default_fetch_json, discover_image_candidates
 
@@ -435,7 +442,27 @@ def _write_generated_concept_asset(request: dict, images_dir: Path, index: int) 
     }
 
 
-def _append_generated_fallbacks(materialized: dict, images_dir: Path) -> dict:
+def _ai_fallback(
+    materialized: dict,
+    images_dir: Path,
+    *,
+    category: str | None = None,
+    theme: str | None = None,
+    max_ai: int = AI_MAX_PER_PACKAGE,
+) -> dict:
+    """戊项 C 通道兜底：未被任何 available 候选满足的 evidence/cover_hero request → 调 Gemini AI 生图。
+
+    复用 Chora 已有的 `generate_cover.py`（Gemini 3 Pro Image）。按上游
+    `references/production-workflow.md` "Generated Images" 章节：克制地用，
+    每图卡组最多 AI_MAX_PER_PACKAGE (2) 张。
+
+    命中本地缓存（同 role/query/target_pages/theme 哈希）→ 不调 API，直接返回。
+    """
+    from distribution_pipeline.assets.ai_image.gateway import generate_ai_asset
+
+    if is_ai_disabled():
+        return materialized
+
     selected_assets = list(materialized.get("selected_assets", []))
     available_pages = {
         page
@@ -444,16 +471,60 @@ def _append_generated_fallbacks(materialized: dict, images_dir: Path) -> dict:
         for page in asset.get("target_pages", [])
     }
     next_requests = []
+    ai_count = sum(1 for a in selected_assets if a.get("provider") == "chora-ai-generated")
     for index, request in enumerate(materialized.get("requests", []), start=1):
         next_request = dict(request)
         target_pages = next_request.get("target_pages", [])
-        needs_visual = next_request.get("role") == "evidence"
         has_visual = any(page in available_pages for page in target_pages)
-        if needs_visual and not has_visual:
-            generated = _write_generated_concept_asset(next_request, images_dir, index)
-            selected_assets.append(generated)
-            available_pages.update(target_pages)
-            next_request["status"] = "generated_fallback"
+        if not has_visual and should_generate_via_ai(request, selected_assets):
+            if ai_count >= max_ai:
+                next_request["status"] = "skipped_ai_quota"
+                next_requests.append(next_request)
+                continue
+            # 1) 缓存命中
+            cached = lookup_cache(
+                images_dir,
+                role=request.get("role", "evidence"),
+                query=request.get("query", ""),
+                target_pages=target_pages,
+                theme=theme,
+            )
+            if cached is not None:
+                selected_assets.append(cached)
+                available_pages.update(target_pages)
+                next_request["status"] = "ai_cache_hit"
+                ai_count += 1
+                next_requests.append(next_request)
+                continue
+            # 2) 调 Gemini
+            try:
+                generated = generate_ai_asset(
+                    request=request,
+                    images_dir=images_dir,
+                    category=category,
+                    theme=theme,
+                    prefer_png=True,
+                )
+            except Exception as exc:
+                # 上游 "Log & Continue" 原则：AI 失败不阻塞
+                next_request["status"] = f"ai_failed:{type(exc).__name__}"
+                next_requests.append(next_request)
+                continue
+            if generated.get("status") == "available":
+                selected_assets.append(generated)
+                available_pages.update(target_pages)
+                next_request["status"] = "ai_generated"
+                ai_count += 1
+                remember_in_cache(
+                    images_dir,
+                    role=request.get("role", "evidence"),
+                    query=request.get("query", ""),
+                    target_pages=target_pages,
+                    theme=theme,
+                    asset=generated,
+                )
+            else:
+                next_request["status"] = generated.get("status", "ai_failed")
         next_requests.append(next_request)
     materialized["requests"] = next_requests
     materialized["selected_assets"] = selected_assets
@@ -533,6 +604,8 @@ def materialize_image_assets(
     assets_dir: Path,
     *,
     image_asset_mode: str = "plan",
+    category: str | dict | None = None,
+    theme: str | None = None,
     fetch_json=None,
     fetch_bytes=None,
 ) -> dict:
@@ -557,7 +630,12 @@ def materialize_image_assets(
         )
     materialized["local_assets"] = [_copy_local_asset(asset, images_dir) for asset in plan.get("local_assets", [])]
     materialized.setdefault("selected_assets", [])
-    materialized = _append_generated_fallbacks(materialized, images_dir)
+    # 戊项 C 通道：未满足的 evidence/cover_hero → 调 Gemini AI 生图兜底
+    # plan 模式（默认）只写搜索计划，按 upstream "Daily 后处理必须记录并继续"
+    # 规则不得生成本地 fallback；candidates/download 模式才允许调 AI。
+    if image_asset_mode in ("candidates", "download"):
+        category_key = category.get("key") if isinstance(category, dict) else category
+        materialized = _ai_fallback(materialized, images_dir, category=category_key, theme=theme)
     assets_dir.mkdir(parents=True, exist_ok=True)
     (assets_dir / "image_assets.json").write_text(
         json.dumps(materialized, ensure_ascii=False, indent=2),

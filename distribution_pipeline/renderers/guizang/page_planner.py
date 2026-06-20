@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from distribution_pipeline.renderers.guizang.category_router import detect_rednote_category
 from distribution_pipeline.renderers.guizang.content_allocator import assign_copy_slots
+from distribution_pipeline.renderers.guizang.screenshot_treatment import detect_screenshot
+from distribution_pipeline.renderers.guizang.subject_mapper import build_subject_map
+from distribution_pipeline.renderers.guizang.title_breaker import semantic_title_lines
 from distribution_pipeline.renderers.xhs_plan import build_xhs_card_plan
 
 
@@ -22,9 +26,9 @@ EDITORIAL_RECIPES = {
 
 SWISS_RECIPES = {
     "cover": ["S01", "S08"],
-    "insight": ["S02", "S03", "S04", "S05", "S06", "S07", "S09", "S10", "S11", "S12"],
-    "concept-map": ["S06", "S09", "S12"],
-    "philosophy": ["S12"],
+    "insight": ["S02", "S03", "S04", "S05", "S06", "S07", "S09", "S10", "S11", "S12", "S13"],
+    "concept-map": ["S06", "S09", "S12", "S13"],
+    "philosophy": ["S12", "S07"],
     "closing": ["S07", "S12"],
 }
 
@@ -80,6 +84,14 @@ def content_profile(source: dict, insights: list[dict]) -> str:
     return "default"
 
 
+def _has_map_signal(text: str) -> bool:
+    return any(word in text for word in (
+        "地理", "地域", "地缘", "跨境", "出海", "迁移", "流动", "流向", "路线", "供应链",
+        "东西方", "东方", "西方", "东移", "西移", "全球化", "区域", "国家", "中美", "中欧",
+        "欧美", "航线", "物流", "贸易", "走廊", "通道", "节点", "枢纽",
+    ))
+
+
 def _split_points(text: str, limit: int = 5) -> list[str]:
     clean = " ".join(str(text or "").split())
     if not clean:
@@ -96,6 +108,34 @@ def _split_points(text: str, limit: int = 5) -> list[str]:
     if len(parts) <= 1 and "，" in clean:
         parts = [part.strip() for part in clean.split("，") if part.strip()]
     return parts[:limit]
+
+
+def _extract_map_nodes(title: str, body: str, limit: int = 4) -> list[dict]:
+    text = f"{title} {body}"
+    candidates = [
+        "中国", "美国", "欧洲", "东南亚", "中东", "非洲", "拉美", "印度", "日本", "韩国",
+        "硅谷", "华尔街", "深圳", "北京", "上海", "香港", "新加坡", "迪拜",
+        "东方", "西方", "全球南方", "发达国家", "新兴市场",
+    ]
+    # 按文本出现顺序收集，避免标题里的“东方”插队到 body“中东”之前
+    nodes = []
+    seen = set()
+    for phrase in candidates:
+        pos = text.find(phrase)
+        if pos == -1:
+            continue
+        nodes.append((pos, phrase))
+    nodes.sort(key=lambda x: x[0])
+    result = []
+    for _, phrase in nodes:
+        if phrase not in seen:
+            seen.add(phrase)
+            result.append({"label": phrase, "role": "region"})
+        if len(result) >= limit:
+            break
+    if len(result) < 2:
+        return []
+    return result
 
 
 def _strong_sentence_count(text: str) -> int:
@@ -147,6 +187,65 @@ def _extract_metric_tokens(text: str, limit: int = 4) -> list[dict]:
     return tokens
 
 
+def _has_swiss_kpi_signal(text: str) -> bool:
+    return (
+        len(_extract_metric_tokens(text, limit=4)) >= 2
+        and any(word in text for word in ("数据", "指标", "增长", "成本", "Token", "百分比", "%", "倍"))
+    )
+
+
+def _enumerated_terms(text: str, limit: int = 5) -> list[str]:
+    clean = " ".join(str(text or "").split())
+    if "、" not in clean:
+        return []
+    for clause in re.split(r"[。！？；;]", clean):
+        if "、" not in clause:
+            continue
+        head = re.split(r"[，,：:]", clause, maxsplit=1)[0]
+        parts = [part.strip() for part in head.split("、") if part.strip()]
+        if len(parts) < 3:
+            continue
+        parts[-1] = re.sub(r"(构成|形成|决定|支撑|组成).*$", "", parts[-1]).strip() or parts[-1]
+        if all(1 <= len(part) <= 16 for part in parts[:limit]):
+            return parts[:limit]
+    return []
+
+
+def _pipeline_note_for_term(term: str) -> str:
+    lowered = str(term or "").lower()
+    if any(word in term for word in ("电价", "价格", "成本", "算力")):
+        return "成本底座"
+    if "moe" in lowered or any(word in term for word in ("模型", "架构", "路由")):
+        return "效率结构"
+    if any(word in term for word in ("云", "厂商", "整合", "供应", "链路")):
+        return "供给链路"
+    if any(word in term for word in ("输入", "数据", "素材")):
+        return "输入层"
+    if any(word in term for word in ("处理", "筛选", "清洗")):
+        return "处理层"
+    if any(word in term for word in ("发布", "输出", "交付")):
+        return "输出层"
+    if any(word in term for word in ("复盘", "反馈", "迭代")):
+        return "迭代层"
+    return "结构节点"
+
+
+def _pipeline_items_from_text(title: str, body: str, limit: int = 3) -> list[dict]:
+    terms = _enumerated_terms(body, limit=limit) or _enumerated_terms(title, limit=limit)
+    return [
+        {
+            "index": f"{index:02d}",
+            "title": term,
+            "note": _pipeline_note_for_term(term),
+        }
+        for index, term in enumerate(terms[:limit], start=1)
+    ]
+
+
+def _pipeline_item_count(title: str, body: str) -> int:
+    return max(len(_split_points(body, limit=6)), len(_enumerated_terms(body)), len(_enumerated_terms(title)))
+
+
 def _build_metric_stats(text: str, display_index: str, chips: list[dict]) -> list[dict]:
     tokens = _extract_metric_tokens(text, limit=3)
     if tokens:
@@ -171,6 +270,7 @@ def _sequence_recipe(
     previous: str | None,
     has_image: bool,
     has_subject_map: bool,
+    card_text: str = "",
 ) -> str | None:
     sequence = (category.get("deck_sequence") or {}).get(mode) or ()
     if role != "insight" or not sequence:
@@ -187,6 +287,13 @@ def _sequence_recipe(
         if recipe in ("M02", "M06", "M10") and not has_image:
             continue
         if recipe in ("M16", "S08") and not (has_image and has_subject_map):
+            continue
+        if mode == "swiss" and recipe == "S09" and not _has_swiss_kpi_signal(card_text):
+            continue
+        if mode == "swiss" and recipe == "S06" and _pipeline_item_count(card_text, card_text) < 3:
+            continue
+        # 短内容避免 S12 矩阵密度不足，改用 fallback 密集 recipe
+        if mode == "swiss" and recipe == "S12" and len(str(card_text or "").strip()) < 160:
             continue
         return recipe
     return None
@@ -352,20 +459,35 @@ def _choose_swiss_insight_recipe(
         return "S02"
     if any(word in text for word in ("风险", "陷阱", "错误", "误区", "不要", "不能", "警惕")) and previous != "S05":
         return "S05"
-    if any(word in text for word in ("流程", "路径", "系统", "架构", "步骤", "链路", "工作流")) and previous != "S06":
+    if (
+        any(word in text for word in ("流程", "路径", "系统", "架构", "步骤", "链路", "工作流"))
+        and _pipeline_item_count(title, body) >= 3
+        and previous != "S06"
+    ):
         return "S06"
     if _has_checklist_signal(text) and len(points) >= 3 and previous != "S11":
         return "S11"
+    if _has_swiss_kpi_signal(text) and previous != "S09":
+        return "S09"
     if (
         _extract_metric_tokens(text, limit=1)
         and any(word in text for word in ("数据", "指标", "增长", "成本", "Token", "百分比", "%", "倍"))
-        and previous != "S09"
+        and previous != "S03"
     ):
-        return "S09"
-    sequence = _sequence_recipe(category or {}, "swiss", "insight", offset, previous, has_image, has_subject_map)
+        return "S03"
+    # map 信号在 metric 之后，避免中美/50倍这类以数据为主的 insight 被误派
+    if _has_map_signal(text) and previous != "S13":
+        map_nodes = _extract_map_nodes(title, body)
+        if len(map_nodes) >= 2:
+            return "S13"
+    sequence = _sequence_recipe(category or {}, "swiss", "insight", offset, previous, has_image, has_subject_map, text)
     if sequence:
         return sequence
     if len(points) >= 3 and previous != "S12":
+        body_text = str(body or "").strip()
+        # 短内容避免 S12/S11 矩阵/ledger 密度不足，改用 S03 file card 靠结构填满页面
+        if len(body_text) < 160 and not _has_checklist_signal(text):
+            return "S03" if previous != "S03" else "S07"
         return "S12"
     return _choose_recipe(["S03", "S04", "S07"], previous, offset=offset)
 
@@ -404,9 +526,18 @@ def _short_cover_lines(title: str) -> list[str]:
         return useful[:2]
     if clauses:
         first = clauses[0]
-        return [first[:14], first[14:28]] if len(first) > 14 else [first]
-    return [clean[:14], clean[14:28]] if len(clean) > 14 else [clean]
+        return semantic_title_lines(first, target=11, max_lines=2, min_tail=3)
+    return semantic_title_lines(clean, target=11, max_lines=2, min_tail=3)
 
+
+
+
+def _cap_title_chars(text: str, limit: int) -> str:
+    """硬 cap 標題中文字符數（標點計入），超限加省略號。"""
+    clean = str(text or "").strip()
+    if not clean or len(clean) <= limit:
+        return clean
+    return clean[:limit].rstrip("，,。.!！?？；;：:、 ") + "…"
 
 def _closing_items(insights: list[dict]) -> list[dict]:
     items = []
@@ -429,6 +560,20 @@ def _asset_matches_page(asset: dict, page_id: str, insight_index: int | None = N
     return page_id in asset.get("target_pages", [])
 
 
+def _resolve_local_image_path(render_path: str, image_assets: dict) -> Path | None:
+    if not render_path or render_path.startswith(("http://", "https://", "data:")):
+        return None
+    candidate = Path(render_path)
+    if candidate.is_absolute():
+        return candidate if candidate.exists() else None
+
+    render_root = image_assets.get("_render_root")
+    if render_root:
+        candidate = Path(render_root) / render_path
+        return candidate if candidate.exists() else None
+    return None
+
+
 def _asset_for_page(image_assets: dict, page_id: str, insight_index: int | None = None) -> dict | None:
     for asset_group in ("local_assets", "selected_assets"):
         for asset in image_assets.get(asset_group, []):
@@ -438,10 +583,12 @@ def _asset_for_page(image_assets: dict, page_id: str, insight_index: int | None 
                 continue
             if not asset.get("render_path"):
                 continue
-            return {
+            image_meta = {
                 "asset_id": asset.get("asset_id", ""),
                 "src": asset.get("render_path", ""),
                 "caption": asset.get("caption", ""),
+                "alt": asset.get("alt", ""),
+                "filename": asset.get("filename", ""),
                 "role": asset.get("role", ""),
                 "object_position": asset.get("object_position", "center 50%"),
                 "subject_map": asset.get("subject_map"),
@@ -450,6 +597,19 @@ def _asset_for_page(image_assets: dict, page_id: str, insight_index: int | None 
                 "author": asset.get("author", ""),
                 "target_insight_index": asset.get("target_insight_index"),
             }
+            image_meta["screenshot"] = detect_screenshot(image_meta, {"role": asset.get("role", "")})
+            # 丁项 + vision 增强：若上游 asset 没附 subject_map，按 caption/alt 启发式生成；
+            # 若图有本地文件，传 image_path 触发 vision 增强（cache → vision → 启发式 fallback）
+            if not image_meta.get("subject_map"):
+                render_path = image_meta.get("src", "")
+                image_path = _resolve_local_image_path(render_path, image_assets)
+                image_meta["subject_map"] = build_subject_map(
+                    image_meta,
+                    {"role": asset.get("role", "")},
+                    image_path=image_path,
+                    cache_dir=image_path.parent if image_path else None,
+                )
+            return image_meta
     return None
 
 
@@ -489,6 +649,7 @@ def _page_from_card(
         "role": role,
         "recipe": recipe,
         "title": title,
+        "title_lines": semantic_title_lines(title, target=11 if mode == "editorial" else 10, max_lines=3, min_tail=3),
         "original_title": original_title,
         "body": body,
         "kicker": {
@@ -517,7 +678,9 @@ def _page_from_card(
         "qa_flags": [],
     }
     if role == "cover":
-        page["title_lines"] = card.get("title_lines") or _short_cover_lines(source.get("title", title))
+        # Cover 標題雙重 cap：先 _short_cover_lines 切分，再硬限 ≤8 中文字
+        raw_lines = card.get("title_lines") or _short_cover_lines(source.get("title", title))
+        page["title_lines"] = [_cap_title_chars(line, 12) for line in raw_lines][:2]
         page["title"] = "\n".join(page["title_lines"])
     if role == "closing":
         page["items"] = card.get("items") or _closing_items(insights)
@@ -532,6 +695,19 @@ def _page_from_card(
         page["items"] = _closing_items(insights[:3])
     if role == "philosophy":
         page["style"] = card.get("style", "")
+    if mode == "swiss" and recipe == "S06":
+        pipeline_items = _pipeline_items_from_text(title, body, limit=3)
+        if pipeline_items:
+            page["items"] = pipeline_items
+    if mode == "swiss" and recipe == "S13":
+        map_nodes = _extract_map_nodes(title, body)
+        if map_nodes:
+            page["map_nodes"] = map_nodes
+            page["map_route"] = {
+                "origin": map_nodes[0]["label"],
+                "destination": map_nodes[-1]["label"],
+                "stops": [n["label"] for n in map_nodes[1:-1]],
+            }
     if role == "insight" and not page["points"]:
         page["points"] = [body] if body else []
     if recipe in ("M16", "S08"):
@@ -571,7 +747,9 @@ def build_xhs_pages(package: dict, max_cards: int | None = None, mode: str = "ed
         offset = insight_offset if role == "insight" else 0
         image_asset = _asset_for_page(image_assets, page_id, card.get("insight_index"))
         has_image = bool(image_asset)
-        has_subject_map = bool((image_asset or {}).get("subject_map"))
+        # 丁项：自动生成的 subject_map（image metadata 空）不算有效，需真实 vision
+        sm = (image_asset or {}).get("subject_map") or {}
+        has_subject_map = bool(sm) and not sm.get("auto_generated", False)
         if mode == "editorial" and role == "cover" and has_image and has_subject_map:
             recipe = "M16" if previous_recipe != "M16" else "M01"
         elif mode == "editorial" and role == "insight":
@@ -582,6 +760,11 @@ def build_xhs_pages(package: dict, max_cards: int | None = None, mode: str = "ed
             )
         elif mode == "swiss" and role == "insight":
             recipe = _choose_swiss_insight_recipe(card, has_image, has_subject_map, previous_recipe, offset, category)
+        elif mode == "swiss" and role == "philosophy":
+            # philosophy 默认用更密集的 S07，避免 S12 矩阵在哲思页密度不足
+            recipe = "S07" if previous_recipe != "S07" else "S12"
+        elif mode == "swiss" and role == "closing":
+            recipe = "S07"
         else:
             recipe = _choose_recipe(recipes[role], previous_recipe, offset=offset)
         pages.append(_page_from_card(card, source, insights, image_assets, recipe, index, role, profile, category, mode, brand))

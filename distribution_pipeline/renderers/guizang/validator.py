@@ -11,6 +11,10 @@ DEPENDENCY_REASON = "Guizang validator requires Node.js and Playwright."
 SANDBOX_REASON = "Guizang validator requires permission to launch a browser process."
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PROJECT_PLAYWRIGHT_BROWSERS = PROJECT_ROOT / ".ms-playwright"
+_DEFAULT_PLAYWRIGHT_BROWSERS = (
+    Path.home() / "Library" / "Caches" / "ms-playwright",
+    Path.home() / ".cache" / "ms-playwright",
+)
 SCAFFOLD_LABELS = {"注记", "脉络", "张力", "信号", "判断", "余波", "边界", "后果"}
 
 
@@ -73,6 +77,17 @@ def _scaffold_label_lines(markup: str) -> list[str]:
     return hits or ["PASS R12 no scaffold label injection visible"]
 
 
+def _proxy_placeholder_lines(markup: str) -> list[str]:
+    hits = []
+    placeholder = re.compile(r"^P\d{2}$")
+    for section_id, section in _poster_sections(markup):
+        for node in visible_text_nodes(section):
+            if placeholder.match(norm_text(node)):
+                hits.append(f"FAIL R14 proxy placeholder visible in {section_id}: {node}")
+                break
+    return hits or ["PASS R14 no visible proxy placeholders"]
+
+
 def review_static_guizang_html(target_dir: Path, mode: str = "editorial") -> dict:
     html_path = Path(target_dir) / "index.html"
     if not html_path.exists():
@@ -116,6 +131,8 @@ def review_static_guizang_html(target_dir: Path, mode: str = "editorial") -> dic
 
     if mode == "swiss" and 'data-metric-source="proxy"' in markup:
         lines.append("PASS R13 Swiss proxy metric scales are explicitly labelled")
+    if mode == "swiss":
+        lines.extend(_proxy_placeholder_lines(markup))
 
     status = parse_validator_output("\n".join(lines))
     return status
@@ -162,6 +179,8 @@ def _is_missing_playwright(text: str) -> bool:
         "ERR_MODULE_NOT_FOUND" in text
         or "Cannot find package 'playwright'" in text
         or "Cannot find module 'playwright'" in text
+        or "Executable doesn't exist" in text
+        or "Looks like Playwright was just installed or updated" in text
     )
 
 
@@ -180,8 +199,11 @@ def _node_env() -> dict[str, str]:
     if env.get("NODE_PATH"):
         paths.append(env["NODE_PATH"])
     env["NODE_PATH"] = os.pathsep.join(paths)
-    if PROJECT_PLAYWRIGHT_BROWSERS.exists():
-        env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(PROJECT_PLAYWRIGHT_BROWSERS))
+    if "PLAYWRIGHT_BROWSERS_PATH" not in env:
+        for candidate in (*_DEFAULT_PLAYWRIGHT_BROWSERS, PROJECT_PLAYWRIGHT_BROWSERS):
+            if candidate.is_dir():
+                env["PLAYWRIGHT_BROWSERS_PATH"] = str(candidate)
+                break
     return env
 
 

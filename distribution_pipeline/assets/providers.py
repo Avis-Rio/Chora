@@ -49,7 +49,7 @@ def _pexels_candidates(request: dict, fetch_json, api_key: str, max_candidates: 
             _compact_candidate(
                 {
                     "provider": "pexels",
-                    "image_url": src.get("large2x") or src.get("large") or src.get("original"),
+                    "image_url": src.get("medium") or src.get("large") or src.get("large2x") or src.get("small"),
                     "source_url": photo.get("url"),
                     "author": photo.get("photographer", ""),
                     "author_url": photo.get("photographer_url", ""),

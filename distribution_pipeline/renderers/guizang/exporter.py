@@ -8,7 +8,20 @@ DEPENDENCY_MESSAGE = (
     "Playwright browser binaries are also required."
 )
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+# Playwright 默認瀏覽器緩存（macOS / Linux 兩套）；無則 Playwright 自己 fall back
+_DEFAULT_PLAYWRIGHT_BROWSERS = (
+    Path.home() / "Library" / "Caches" / "ms-playwright",  # macOS
+    Path.home() / ".cache" / "ms-playwright",             # Linux
+)
 PROJECT_PLAYWRIGHT_BROWSERS = PROJECT_ROOT / ".ms-playwright"
+
+
+def _resolve_default_playwright_browsers() -> Path | None:
+    """優先已存在的 ms-playwright 目錄（用戶緩存 > 項目緩存）。"""
+    for candidate in (*_DEFAULT_PLAYWRIGHT_BROWSERS, PROJECT_PLAYWRIGHT_BROWSERS):
+        if candidate.is_dir():
+            return candidate
+    return PROJECT_PLAYWRIGHT_BROWSERS
 
 
 def discover_guizang_render_scripts(package_dir: Path) -> list[Path]:
@@ -30,8 +43,37 @@ def _node_env() -> dict[str, str]:
     if env.get("NODE_PATH"):
         paths.append(env["NODE_PATH"])
     env["NODE_PATH"] = os.pathsep.join(paths)
-    env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(PROJECT_PLAYWRIGHT_BROWSERS))
+    if "PLAYWRIGHT_BROWSERS_PATH" not in env:
+        default_dir = _resolve_default_playwright_browsers()
+        if default_dir is not None:
+            env["PLAYWRIGHT_BROWSERS_PATH"] = str(default_dir)
     return env
+
+
+def _generate_thumbnails(output_dir: Path, width: int = 360) -> list[Path]:
+    """为每个已导出的 PNG 生成小尺寸缩略图，供 360px 可读性目检。"""
+    try:
+        from PIL import Image
+    except ImportError:
+        return []
+
+    output_dir = Path(output_dir)
+    thumb_dir = output_dir / "thumbnails"
+    thumb_dir.mkdir(parents=True, exist_ok=True)
+    thumbs: list[Path] = []
+
+    for png_path in sorted(output_dir.glob("*.png")):
+        try:
+            with Image.open(png_path) as img:
+                orig_width, orig_height = img.size
+                height = int(orig_height * width / orig_width)
+                thumb = img.resize((width, height), Image.Resampling.LANCZOS)
+                thumb_path = thumb_dir / f"{png_path.stem}_thumb{width}.png"
+                thumb.save(thumb_path, "PNG")
+                thumbs.append(thumb_path)
+        except Exception as exc:
+            print(f"  ⚠️ 缩略图生成失败 {png_path.name}: {exc}")
+    return thumbs
 
 
 def export_guizang_images(package_dir: Path) -> list[Path]:
@@ -61,5 +103,10 @@ def export_guizang_images(package_dir: Path) -> list[Path]:
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError(f"Guizang image export timed out for {script}") from exc
         image_paths.extend(sorted((script.parent / "output").glob("*.png")))
+        # 360px 缩略图检查
+        thumbs = _generate_thumbnails(script.parent / "output", width=360)
+        if thumbs:
+            print(f"  Generated {len(thumbs)} 360px thumbnails for manual readability check")
+        image_paths.extend(thumbs)
 
     return image_paths

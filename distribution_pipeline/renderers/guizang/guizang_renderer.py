@@ -4,6 +4,7 @@ from html import escape
 from pathlib import Path
 
 from distribution_pipeline.assets.image_assets import materialize_image_assets
+from distribution_pipeline.renderers.guizang.category_router import detect_rednote_category
 from distribution_pipeline.renderers.guizang.page_planner import build_xhs_pages
 from distribution_pipeline.renderers.guizang.page_planner import content_profile
 from distribution_pipeline.renderers.guizang.recipes import render_page_section
@@ -53,7 +54,7 @@ def _copy_assets(target_dir: Path, mode: str) -> None:
     assets_dir = target_dir / "assets"
     assets_dir.mkdir(parents=True, exist_ok=True)
     if mode == "editorial":
-        shutil.copyfile(vendor_path("magazine-bg-webgl.js"), assets_dir / "magazine-bg-webgl.js")
+        shutil.copyfile(vendor_path("assets/magazine-bg-webgl.js"), assets_dir / "magazine-bg-webgl.js")
 
 
 def _copy_brand_assets(target_dir: Path, brand: dict | None = None) -> dict:
@@ -85,6 +86,109 @@ def _auto_theme(package: dict, mode: str, theme: str) -> str:
     if profile == "ai-tech":
         return "indigo-porcelain"
     return "ink-classic"
+
+
+def _select_mode_heuristic(package: dict, target: str) -> str:
+    """回退啟發式：基於 content_profile / category / 關鍵詞計數。"""
+    source = package.get("source", {})
+    insights = package.get("insights", [])
+    profile = content_profile(source, insights)
+    category = detect_rednote_category(source, insights)
+    text = " ".join(
+        [
+            str(source.get("title", "")),
+            str(source.get("channel", "")),
+            " ".join(str(tag) for tag in source.get("tags", [])),
+            " ".join(str(item.get("title", "")) for item in insights[:6]),
+            " ".join(str(item.get("body", "")) for item in insights[:3]),
+        ]
+    ).lower()
+
+    if category.get("key") in {"workplace", "recommend", "fitness", "makeup"}:
+        return "swiss"
+    if profile == "creator-growth":
+        return "swiss"
+    if profile == "ai-tech" and any(word in text for word in ("token", "成本", "价格", "指标", "数据", "算力", "增长", "%", "倍")):
+        return "swiss"
+    return "editorial"
+
+
+def _select_mode_via_llm(package: dict, target: str) -> str | None:
+    """調外部 LLM 根據內容自定 mode（editorial/swiss）。
+
+    設計：環境變量 `CHORA_DISTRIBUTION_MODE_LLM_URL` 提供 OpenAI-compatible 端點時啟用；
+    否則返回 None（讓 fallback 接管）。當前 sandbox 網絡受限，內部默認走啟發式。
+    """
+    import os
+
+    url = os.environ.get("CHORA_DISTRIBUTION_MODE_LLM_URL", "").strip()
+    api_key = os.environ.get("CHORA_DISTRIBUTION_MODE_LLM_KEY", "").strip()
+    model = os.environ.get("CHORA_DISTRIBUTION_MODE_LLM_MODEL", "claude-sonnet-4-20250514")
+    if not url or not api_key:
+        return None
+
+    source = package.get("source", {})
+    insights = package.get("insights", [])
+    payload_text = (
+        f"標題：{source.get('title','')}\n"
+        f"標籤：{', '.join(source.get('tags', []))}\n"
+        f"洞察（前 3 條）：\n"
+        + "\n".join(f"- {i.get('title','')}：{i.get('body','')[:80]}" for i in insights[:3])
+    )
+    prompt = (
+        "你是視覺風格策劃。基於以下內容，選擇最契合的卡片風格（僅返回模式名）：\n"
+        "- editorial：文學 / 敘事 / 哲思 / 人物 / 社會議題\n"
+        "- swiss：科技 / 數據 / 結構 / 商業 / 投資 / 效率\n\n"
+        f"{payload_text}\n\n模式："
+    )
+
+    try:
+        import requests  # type: ignore[import-not-found]
+
+        response = requests.post(
+            url,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 16,
+                "temperature": 0.1,
+            },
+            timeout=15,
+        )
+    except Exception as exc:  # noqa: BLE001 - any network failure → fallback
+        print(f"[guizang_mode_llm] LLM 調用失敗: {exc}")
+        return None
+    if response.status_code != 200:
+        print(f"[guizang_mode_llm] 非 200: {response.status_code}")
+        return None
+    try:
+        result = response.json()
+        text = (result.get("choices", [{}])[0].get("message", {}).get("content") or "").strip().lower()
+    except Exception:
+        return None
+    if "swiss" in text:
+        return "swiss"
+    if "editorial" in text:
+        return "editorial"
+    return None
+
+
+def resolve_guizang_mode(package: dict, requested: str = "editorial", target: str = "xhs") -> str:
+    """解析當前渲染應使用的 Guizang mode（editorial/swiss）。
+
+    requested:
+      - "editorial" / "swiss" → 強制指定
+      - "auto" → 走啟發式
+      - "llm" → 優先 LLM 自定，失敗回退啟發式
+    """
+    if requested not in ("auto", "llm"):
+        return requested
+    if requested == "llm":
+        llm_mode = _select_mode_via_llm(package, target)
+        if llm_mode in ("editorial", "swiss"):
+            return llm_mode
+    return _select_mode_heuristic(package, target)
 
 
 def _asset_by_id(image_assets: dict, asset_id: str) -> dict:
@@ -168,13 +272,15 @@ def _wechat_cover_copy(package: dict) -> dict:
     }
 
 
-def _wechat_section_shell(section_id: str, poster_class: str, inner: str) -> str:
+def _wechat_section_shell(section_id: str, poster_class: str, inner: str, decorative: bool = True) -> str:
+    layers = """
+      <canvas class="mag-bg" data-bg="ink-flow" style="display:block"></canvas>
+      <div class="paper-wash" style="display:block"></div>
+      <div class="grain" style="display:block"></div>
+""" if decorative else ""
     return f"""
     <section class="poster {poster_class}" id="{_e(section_id)}">
-      <canvas class="mag-bg" data-bg="ink-flow"></canvas>
-      <div class="paper-wash"></div>
-      <div class="grain"></div>
-      {inner}
+{layers}      {inner}
     </section>"""
 
 
@@ -219,9 +325,76 @@ def _render_wechat_square(copy: dict, source: dict, section_id: str = "wechat-1x
     return _wechat_section_shell(section_id, "square", inner)
 
 
-def _render_wechat_pair_preview(copy: dict, source: dict, image: dict) -> str:
-    wide = _render_wechat_wide(copy, source, image, section_id="wechat-preview-wide")
-    square = _render_wechat_square(copy, source, section_id="wechat-preview-square")
+def _render_wechat_swiss_wide(copy: dict, source: dict, image: dict, section_id: str = "wechat-21x9") -> str:
+    title = _e(copy.get("wide_title") or " ".join(copy["long_lines"]))
+    stats = [
+        {"num": "01", "lbl": "INSIGHT"},
+        {"num": source.get("channel", "Chora")[:8], "lbl": "SOURCE"},
+    ]
+    stats_html = "\n".join(
+        f"""
+          <div class="stat-block" style="padding:20px 28px;background:rgba(var(--ink-rgb),.05);border-left:3px solid var(--accent)">
+            <p class="num" style="font-size:48px;line-height:1">{_e(s['num'])}</p>
+            <p class="lbl" style="font-size:16px;letter-spacing:.12em">{_e(s['lbl'])}</p>
+          </div>"""
+        for s in stats
+    )
+    image_html = ""
+    if image.get("render_path"):
+        image_html = f"""
+          <figure class="frame-img r-16x9" style="min-height:360px">
+            <img src="{_e(image.get("render_path"))}" alt="{_e(image.get("caption") or "source cover")}" style="object-position:{_e(image.get("object_position", "center 50%"))}">
+          </figure>"""
+    else:
+        image_html = f"""
+          <div style="min-height:360px;border:1px solid var(--line);background:rgba(var(--accent-rgb),.06);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:44px;color:rgba(var(--accent-rgb),.42);letter-spacing:.18em;text-transform:uppercase">
+            CHORA
+          </div>"""
+    inner = f"""
+      <div class="content" style="display:grid;grid-template-columns:minmax(0,1fr) 520px;gap:40px;align-items:center;padding:var(--sp-10) var(--sp-12)">
+        <div class="stack gap-4">
+          <div class="issue-row">
+            <span>WeChat · 21:9</span><span class="dot"></span><span>{_e(source.get("channel", "Chora"))}</span>
+          </div>
+          <h1 class="h-display" style="font-size:72px;line-height:1.06">{title}</h1>
+          <p class="lead" style="font-size:26px;line-height:1.38;max-width:900px">{_e(copy["body"])}</p>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:8px">
+{stats_html}
+          </div>
+        </div>
+{image_html}
+      </div>"""
+    return _wechat_section_shell(section_id, "wide swiss", inner, decorative=False)
+
+
+def _render_wechat_swiss_square(copy: dict, source: dict, section_id: str = "wechat-1x1") -> str:
+    title = "<br>".join(_e(line) for line in copy["short_lines"] if str(line or "").strip())
+    inner = f"""
+      <div class="content stack gap-4" style="justify-content:center;align-items:center;text-align:center">
+        <p class="kicker" style="font-size:18px">WeChat · 1:1 · {_e(source.get("channel", "Chora"))}</p>
+        <h1 class="h-display" style="font-size:88px;line-height:1.06">{title}</h1>
+        <hr class="rule-accent" style="width:180px;height:4px">
+        <div style="display:flex;gap:48px;justify-content:center;margin-top:12px">
+          <div style="text-align:center">
+            <p style="font-family:var(--mono);font-size:44px;line-height:1;color:var(--accent)">01</p>
+            <p class="t-meta" style="font-size:18px">ISSUE</p>
+          </div>
+          <div style="text-align:center">
+            <p style="font-family:var(--mono);font-size:44px;line-height:1;color:var(--accent)">SWISS</p>
+            <p class="t-meta" style="font-size:18px">STYLE</p>
+          </div>
+        </div>
+      </div>"""
+    return _wechat_section_shell(section_id, "square swiss", inner, decorative=False)
+
+
+def _render_wechat_pair_preview(copy: dict, source: dict, image: dict, mode: str = "editorial") -> str:
+    if mode == "swiss":
+        wide = _render_wechat_swiss_wide(copy, source, image, section_id="wechat-preview-wide")
+        square = _render_wechat_swiss_square(copy, source, section_id="wechat-preview-square")
+    else:
+        wide = _render_wechat_wide(copy, source, image, section_id="wechat-preview-wide")
+        square = _render_wechat_square(copy, source, section_id="wechat-preview-square")
     return f"""
     <section class="pair-preview" id="wechat-cover-pair-preview" style="width:2400px;min-height:820px;grid-template-columns:1260px 648px;grid-template-rows:700px;gap:48px;overflow:hidden">
       <div class="preview-wide">
@@ -245,9 +418,14 @@ def _render_wechat_pair_preview(copy: dict, source: dict, image: dict) -> str:
 
 def build_wechat_render_targets() -> list[dict]:
     return [
-        {"selector": "#wechat-21x9", "filename": "wechat-21x9-cover.png"},
-        {"selector": "#wechat-1x1", "filename": "wechat-1x1-cover.png"},
-        {"selector": "#wechat-cover-pair-preview", "filename": "wechat-cover-pair-preview.png"},
+        {"selector": "#wechat-21x9", "filename": "wechat-21x9-cover.png", "width": 2100, "height": 900},
+        {"selector": "#wechat-1x1", "filename": "wechat-1x1-cover.png", "width": 1080, "height": 1080},
+        {
+            "selector": "#wechat-cover-pair-preview",
+            "filename": "wechat-cover-pair-preview.png",
+            "width": 2400,
+            "height": 844,
+        },
     ]
 
 
@@ -259,19 +437,24 @@ def render_guizang_xhs_package(
     theme: str = "indigo-porcelain",
     image_asset_mode: str = "plan",
 ) -> list[Path]:
+    mode = resolve_guizang_mode(package, mode, target="xhs")
     package_dir = Path(package_dir)
     xhs_dir = package_dir / "xhs"
     xhs_dir.mkdir(parents=True, exist_ok=True)
 
     resolved_theme = _auto_theme(package, mode, theme)
     theme_spec = resolve_theme(mode, resolved_theme)
+    category = detect_rednote_category(package.get("source", {}), package.get("insights", []))
     _copy_assets(xhs_dir, mode)
     brand = _copy_brand_assets(xhs_dir, package.get("brand"))
     image_assets = materialize_image_assets(
         package.get("image_assets"),
         xhs_dir / "assets",
         image_asset_mode=image_asset_mode,
+        category=category,
+        theme=resolved_theme,
     )
+    image_assets["_render_root"] = str(xhs_dir)
     package = {**package, "image_assets": image_assets, "brand": brand}
     pages = build_xhs_pages(package, max_cards=max_cards, mode=mode)
     sections = [render_page_section(page, mode=mode) for page in pages]
@@ -296,8 +479,7 @@ def render_guizang_wechat_package(
     theme: str = "indigo-porcelain",
     image_asset_mode: str = "plan",
 ) -> list[Path]:
-    if mode != "editorial":
-        raise NotImplementedError("Guizang wechat renderer currently supports editorial mode")
+    mode = resolve_guizang_mode(package, mode, target="wechat")
 
     package_dir = Path(package_dir)
     wechat_dir = package_dir / "wechat"
@@ -305,21 +487,33 @@ def render_guizang_wechat_package(
 
     resolved_theme = _auto_theme(package, mode, theme)
     theme_spec = resolve_theme(mode, resolved_theme)
+    category = detect_rednote_category(package.get("source", {}), package.get("insights", []))
     _copy_assets(wechat_dir, mode)
     image_assets = materialize_image_assets(
         package.get("image_assets"),
         wechat_dir / "assets",
         image_asset_mode=image_asset_mode,
+        category=category,
+        theme=resolved_theme,
     )
+    image_assets["_render_root"] = str(wechat_dir)
     package = {**package, "image_assets": image_assets}
     cover_copy = _wechat_cover_copy(package)
     source = package["source"]
     cover_image = _asset_by_id(image_assets, "source-cover")
-    sections = [
-        _render_wechat_wide(cover_copy, source, cover_image),
-        _render_wechat_square(cover_copy, source),
-        _render_wechat_pair_preview(cover_copy, source, cover_image),
-    ]
+
+    if mode == "swiss":
+        sections = [
+            _render_wechat_swiss_wide(cover_copy, source, cover_image),
+            _render_wechat_swiss_square(cover_copy, source),
+            _render_wechat_pair_preview(cover_copy, source, cover_image, mode="swiss"),
+        ]
+    else:
+        sections = [
+            _render_wechat_wide(cover_copy, source, cover_image),
+            _render_wechat_square(cover_copy, source),
+            _render_wechat_pair_preview(cover_copy, source, cover_image, mode="editorial"),
+        ]
 
     html = load_template(mode)
     html = _replace_html_attribute(html, theme_spec["attribute"], theme_spec["value"])

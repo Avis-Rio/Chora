@@ -23,8 +23,11 @@ def build_manifest(package_dir: Path, source_content_dir: str | None = None, rev
             html_files.extend(sorted((xhs_dir / "cards").glob("*.html")))
 
         png_files = []
+        thumbnail_files = []
         if (xhs_dir / "output").exists():
             png_files.extend(sorted((xhs_dir / "output").glob("*.png")))
+        if (xhs_dir / "output" / "thumbnails").exists():
+            thumbnail_files.extend(sorted((xhs_dir / "output" / "thumbnails").glob("*.png")))
         if (xhs_dir / "cards").exists():
             png_files.extend(sorted((xhs_dir / "cards").glob("*.png")))
         post_path = xhs_dir / "post.md"
@@ -32,8 +35,10 @@ def build_manifest(package_dir: Path, source_content_dir: str | None = None, rev
             "post_md": _relative(post_path, package_dir) if post_path.exists() else "",
             "html_count": len(html_files),
             "png_count": len(png_files),
+            "thumbnail_count": len(thumbnail_files),
             "html_files": [_relative(path, package_dir) for path in html_files],
             "png_files": [_relative(path, package_dir) for path in png_files],
+            "thumbnail_files": [_relative(path, package_dir) for path in thumbnail_files],
         }
 
     wechat_dir = package_dir / "wechat"
