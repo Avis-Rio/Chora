@@ -137,14 +137,17 @@ CHORA_DISTRIBUTION_MAX_CARDS=8
 如果要导出 PNG，需要 Node 侧 Playwright 依赖：
 
 ```bash
-npm install --save-dev playwright --ignore-scripts
+npm install --ignore-scripts
+npm run guizang:install-browser
 ```
 
-安装后去掉 `--no-export-images`，会调用 `xhs/render.cjs` 并输出到 `xhs/output/`。当前 `render.cjs` 和 validator 都会优先使用本机 Chrome，避免强制下载 Playwright Chromium。
+安装后去掉 `--no-export-images`，会调用 `xhs/render.cjs` 并输出到 `xhs/output/`。当前 `render.cjs` 以 Playwright 为主路径；`wkhtmltoimage` 仅在 `GUIZANG_RENDERER=wkhtmltoimage` 强制指定，或 Playwright 包不可用 / 浏览器启动失败时兜底。validator 也使用 Playwright 浏览器；若浏览器二进制缺失，会把结果标记为依赖未满足，而不是内容 QA 失败。
 
-注意：在 Codex 默认沙箱中，浏览器进程可能被系统权限阻止。如果遇到 `kill EPERM`、`SIGABRT`、`Chrome CDP endpoint was not ready` 或无法创建 `~/Library/Caches/ms-playwright/__dirlock`，不需要安装 MCP，也不需要切到外部 Terminal；在 Codex 中允许这条 `python3 -m distribution_pipeline.generate_distribution ...` 命令以非沙箱方式运行即可完成 PNG 与 validator 验收。
+注意：在 Codex 默认沙箱中，浏览器进程可能被系统权限阻止。如果遇到 `kill EPERM`、`SIGABRT`、`Chrome CDP endpoint was not ready` 或无法创建 `~/Library/Caches/ms-playwright/__dirlock`，优先安装 Playwright Chromium 并重跑；若仍失败，可让 `render.cjs` 走 `wkhtmltoimage` 兜底，但 wkhtml 的旧 WebKit 对现代 CSS 支持有限，交付前必须目检关键 PNG。
 
-当前验收基线：`tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学` 使用 Guizang Swiss、`image_assets=plan` 可导出 10 张 `1080x1440` PNG。validator 通过只是机器 QA，交付前还必须目检关键 PNG，确认没有假图入版、标题裁切、版式失衡或大片无意义留白。
+当前验收基线：`content_archive/2026-05-13/youtube_硅谷101_Token经济学：AI时代的新货币战争` 使用 Guizang Swiss、`image_assets=plan`、`--cards 8` 可导出 8 张 `1080x1440` PNG。manifest 记录 `png_count=8`，Guizang validator `0 fail`，静态 QA `pass`；R5 密度提示从 2 个降至 1 个（xhs-06 58%），属可接受的 advisory warning。validator 通过只是机器 QA，交付前还必须目检关键 PNG，确认没有假图入版、标题裁切、版式失衡或大片无意义留白。
+
+导出 PNG 后，系统会自动在 `xhs/output/thumbnails/` 下生成 360px 宽度缩略图，便于快速检查小屏预览时的文字/主体可辨识性；manifest 会单独列出 `thumbnail_files` 与 `thumbnail_count`。
 
 ### 图像证据层
 
@@ -176,7 +179,9 @@ UNSPLASH_ACCESS_KEY=<your_key>
 
 Swiss 的 S08 image hero 仍要求 `subject_map`。如果图片没有主体安全区域，只能进入 evidence panel / browser mock / file card 等非叠字版式，避免把标题或说明压到主体上。
 
-Swiss 配方还有内容密度门槛：S09 KPI Tower 至少需要 2 个真实数字；单指标洞察优先回到 S03 File Card。S06 Pipeline 至少需要 3 个流程/枚举节点；中文顿号枚举会拆成独立节点，节点不足时不得硬排三栏。
+Swiss 配方还有内容密度门槛：S09 KPI Tower 至少需要 2 个真实数字；单指标洞察优先回到 S03 File Card。S06 Pipeline 至少需要 3 个流程/枚举节点；中文顿号枚举会拆成独立节点，节点不足时不得硬排三栏。短内容（points ≥3 但正文 <160 字符）避免使用 S12 Matrix，改为 S11 Stacked Ledger（已补底部 stat）以改善 R5 密度。哲思结语页（philosophy）默认使用更密集的 S07 Takeaway Ledger，避免 S12 矩阵在哲思页底部稀疏。
+
+Swiss 新增 **S13 Map · Route** 版式：当洞察文本出现地理、跨境、迁移、路线、供应链、东西方流动等信号时，自动提取文本中的区域/国家节点，生成抽象路线卡片（起点 → 途经点 → 终点），使用 CSS 节点与连线，不依赖外部地图 API token。
 
 外部图片版权不会被自动判定为可商用。`SOURCES.md` 会保存图源、作者、原始 URL 与版权状态，发布前仍需人工确认。
 
@@ -228,11 +233,10 @@ Guizang 小红书末卡会使用低调 CTA 条。若项目内存在透明背景 
 
 公众号素材更克制，默认生成：
 
-- `hero.html`：文章首图，`1200x675`
-- `inline_*.html`：文中洞见贴图，`900x500`
-- `appendix.md`：文章末尾导流文案
+- `wechat/index.html`：包含 `wechat-21x9` 主封面（2100x900）、`wechat-1x1` 方形封面（1080x1080）与 pair preview
+- `wechat/appendix.md`：文章末尾导流文案
 
-公众号贴图不追求小红书式强钩子，而更强调杂志内页感、留白和长期品牌识别。
+Guizang 微信公众号渲染支持 `editorial` 与 `swiss` 两种模式，`--guizang-mode auto` 对公众号同样会按内容启发式选择（科技/数据/商业类内容自动走 Swiss）。Swiss 模式下的公众号封面使用大标题 + 统计块 + 品牌标识，保持与小红书 Swiss 卡片一致的视觉系统。
 
 ## 风格语法
 
@@ -294,10 +298,10 @@ python3 -m playwright install chromium
 | 序 | 项 | 优先级 | 状态 | 落点 |
 |---|---|---|---|---|
 | 甲 | 补 `vendor/guizang` 全量（SKILL.md / references/ 15 项 / 9 张 webp / VENDORING.md） | **高** | ✅ 2026-06-14 完成 | `vendor/guizang/` |
-| 乙 | 扩 `category_router` 至 11 类（按上游 `category-cookbook.md`） | 高 | 待办 | `renderers/guizang/category_router.py` |
-| 丙 | 补截图四件套（`.frame-shot` 六参数）至 image_assets / page_planner / recipes | 中 | 待办 | `recipes.py` + `page_planner.py` |
-| 丁 | 补文字压图主体映射（`image-overlay.md` Rule 2） | 中 | 待办 | `image_assets.py` + `recipes.py` |
-| 戊 | 复用 `generate_cover.py`（Gemini）接 C 通道 AI 生图兜底 | 低 | 待办 | `image_assets.py` 内 `_ai_fallback` 槽 |
+| 乙 | 扩 `category_router` 至 11 类（按上游 `category-cookbook.md`） | 高 | ✅ 2026-06-14 完成 | `renderers/guizang/category_router.py` |
+| 丙 | 补截图四件套（`.frame-shot` 六参数）至 image_assets / page_planner / recipes | 中 | 部分完成 | `screenshot_treatment.py` + `recipes.py` + `page_planner.py` |
+| 丁 | 补文字压图主体映射（`image-overlay.md` Rule 2） | 中 | 部分完成 | `subject_mapper.py` + `vision_subject_mapper.py` + `recipes.py` |
+| 戊 | 复用 `generate_cover.py`（Gemini）接 C 通道 AI 生图兜底 | 低 | 部分完成 | `assets/ai_image/gateway.py` + `image_assets.py` |
 
 ### 甲 · Vendor 全量同步（已完成）
 
@@ -644,8 +648,8 @@ python3 -m playwright install chromium
 - LLM 据内容自定样式（editorial / swiss / magazine ...）
 
 ### 渲染兜底
-- `render.cjs` wkhtmltoimage 优先；显式 `PLAYWRIGHT_CHROMIUM_PATH` 才走 Chrome
-- Sandbox 拒 Chromium launch（1217/1208 SIGKILL）→ wkhtml 兜底可用
+- `render.cjs` 现为 Playwright 优先；`wkhtmltoimage` 只在 `GUIZANG_RENDERER=wkhtmltoimage` 或 Playwright 不可用 / 启动失败时兜底
+- Sandbox 拒 Chromium launch 时可尝试 wkhtml 兜底，但 wkhtml 输出必须额外目检，避免旧 WebKit 造成样式回退
 
 ### 测试
 - 315 通过 / 1 fixture drift（S04 swiss 文案，AGENTS.md 不修）

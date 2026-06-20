@@ -49,7 +49,7 @@
 
 ### 5. Closing 不叠加 Archive Index
 
-- Closing page 使用独立 M07 closing layout。
+- Closing page 使用独立 closing layout；Swiss closing 固定走 S07 Takeaway Ledger，避免为避重落到稀疏 S12。
 - 不允许把 Archive Index / Margin Index / Structure Field 强行塞进 closing。
 - 收尾页必须有：大标题、正文/邀请、3-4 个总结项或一个 closing block。
 - footer 不能与正文或 index 面板重叠。
@@ -127,6 +127,28 @@
 - PNG 数量、尺寸、命名通过。
 - `validate-social-deck.mjs` 或 artifact contract 无 fail。
 - contact sheet 或关键单图已目检。
+- validator 通过不等于视觉通过；标题裁切、重心偏移、假图入版和大片空白必须靠关键 PNG 目检确认。
+
+### 14.1 Daily 后处理必须记录并继续
+
+- `process_video.py`、`process_podcast.py`、`process_feed.py` 在 `rewritten.md` 成功生成后自动触发 Guizang XHS 分发包。
+- 分发失败不能中断主内容归档；错误必须写入当前内容目录的 `distribution_errors.log`。
+- 批量补 rewrite 默认不自动生图；需要使用 `python3 batch_rewrite.py --generate-distribution` 显式开启。
+- 自动后处理默认走 `platform=xhs`、`renderer=guizang`、`guizang_mode=auto`。
+- 自动后处理与 Guizang CLI 默认 `image_assets=plan`，只复制本地素材、写搜索计划；不得生成本地 CSS/SVG 概念 fallback。外部候选或下载必须显式选择 `candidates` / `download`。
+- 静默 daily 流不得在图源选择上停下来询问用户；用配置和 `SOURCES.md` 留痕。
+
+### 14.2 XHS 文案必须按题材生成
+
+- `post.md` 正文不能固定使用同一段通用解释或“如果只记一件事”模板。
+- 文案要从首个洞见、文章题材和频道信息里选择开场角度、读者场景和 2-3 个问题。
+- Tags 要先保留来源标签与语义标签，再保留 `深度阅读`、`Chora`、`Rhizomata` 品牌标签。
+
+### 14.3 标题断行必须保护语义短语
+
+- 标题断行不能把 `新形态`、`大宗商品`、`自主权`、人名或英文专名切断。
+- 下一行不能以 `的/之/与/和` 等虚词开头；必要时宁可让上一行稍长。
+- 新增标题概念时，同步补 `title_breaker.py` 保护词与回归测试。
 
 ### 15. 微信封面对必须分开构图
 
@@ -149,13 +171,18 @@
 - Category cookbook 不能被单个泛词触发；必须有显式标签/类别名或至少两项证据，避免把“技术路线”误判成旅行、“时间管理”误判成职场。
 - WeChat Editorial 封面对已接入：21:9、1:1、pair preview 三画板同文件生成。
 - S08 image hero 和 M16 image-led cover 自动路由必须有 `subject_map`；没有 subject map 的图片只能走非叠字 recipe。
+- Swiss 洞见页若有真实证据图但没有 `subject_map`，只能进入非叠字 evidence panel，不能丢图回到纯文字页，也不能仅因“有图”强制改派 S04。
+- Swiss S09 KPI Tower 至少需要 2 个真实数字；只有一个数字时优先回到 S03 File Card，避免单指标撑塔。
+- Swiss S06 Pipeline 至少需要 3 个流程/枚举节点；中文顿号枚举可以拆成结构节点，节点不足时不得硬排三栏。
 - 图上叠字 HTML 必须写入 `subject map` 和 `thumbnail policy`；静态 QA 会检查 R8/R9/R10。
 - Swiss 数据型 recipe 会先抽原文真实数字；无真实数字时必须显式标记 `proxy`，不能伪装成事实指标。
+- Swiss proxy metric 不得把 `P01/P02` 这类内部占位符渲染到页面；R14 会阻断。
 - closing 不再塞 Archive Index。
 - 重复文本渲染有回归测试；静态 QA 的 R11 会阻断单张卡片内部较长可见文案重复。
 - scaffold label 泄露有回归测试；静态 QA 的 R12 会阻断 `注记/脉络/张力` 等内部标签进入最终卡片。
 - Swiss closing CTA 已固定为 Chora Archive 组与 Rhizomata 组，不再把 URL、二维码、公众号名混成一组。
 - 深色主题已有 `paper-wash` 和背景降噪。
+- daily rewrite 后处理已接入 `distribution_pipeline.automation.generate_distribution_after_rewrite()`，失败写入 `distribution_errors.log` 并继续主流程。
 
 ## 后续落地顺序
 
