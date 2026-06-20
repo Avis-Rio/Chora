@@ -98,26 +98,27 @@ vendor/guizang/
 ### 4.1 模板与样式
 
 - 渲染入口 `distribution_pipeline/renderers/guizang/guizang_renderer.py` 复制本目录两个 `template-*.html` 至任务工作目录，再按 `page_planner` 规划的版式注入 `<!-- POSTERS_HERE -->`。
-- `recipes.py` 实现 28 个版式骨架中**已实现子集**（M01-M16 杂志风 + S01-S12 瑞士风）的渲染函数；尚未覆盖的版式在 `docs/guizang-recipe-coverage.md` 中标注。
+- `recipes.py` 实现 28 个版式骨架中**已实现子集**（M01-M16 杂志风 + S01-S13 瑞士风，含新增 S13 Map · Route）的渲染函数；尚未覆盖的版式在 `docs/guizang-recipe-coverage.md` 中标注。
 
 ### 4.2 子规范（references/）
 
 | 子规范 | Chora 端消费点 |
 |---|---|
-| `category-cookbook.md` | `renderers/guizang/category_router.py`（当前 4 类，目标 11 类，详见 `docs/distribution-pipeline.md`） |
-| `image-overlay.md` | **未实现**：subject-zone discovery 与 localized tint fallback（TODO 项） |
-| `screenshot-treatment.md` | **未实现**：`.frame-shot` 六参数（TODO 项） |
-| `map-component.md` | **未实现**：Mapbox Static 集成（无 token） |
+| `category-cookbook.md` | `renderers/guizang/category_router.py`（已对齐 11 类 + 4 类 out-of-scope pushback，详见 `docs/distribution-pipeline.md`） |
+| `image-overlay.md` | `renderers/guizang/subject_mapper.py` + `vision_subject_mapper.py`（启发式主体映射已接；vision 通道默认关闭，需环境变量启用；localized tint 仍待加深） |
+| `screenshot-treatment.md` | `renderers/guizang/screenshot_treatment.py` + `recipes.py`（`.frame-shot` 六参数、device 包裹、截图检测已接；多截图墙与语义分配仍待补） |
+| `map-component.md` | `renderers/guizang/page_planner.py` + `recipes.py` 新增 **S13 Map · Route**：基于文本中的地理/跨境/迁移关键词生成抽象路线卡片；不依赖 Mapbox Static token，使用 CSS/SVG 节点与连线 |
 | `layout-recipes.md` | `renderers/guizang/recipes.py` + `page_planner.py` |
 | `theme-presets.md` | `renderers/guizang/theme.py` |
 | `style-system.md` | `renderers/guizang/recipes.py` 内的字体 / 卡片 / 间距 token |
 | `portrait-fill.md` | `recipes.py` 内 `r-*` 比例类 |
 | `qa-checklist.md` | `renderers/guizang/validator.py` + `validate-social-deck.mjs`（上游脚本） |
-| 其余 6 个 | 当前未直接消费，作为未来实现的参考 |
+| `production-workflow.md` | `assets/ai_image/gateway.py` + `image_assets.py`（AI 生图兜底已接入 candidates/download；`plan` 默认不生图） |
+| 其余 5 个 | 当前未直接消费，作为未来实现的参考 |
 
 ### 4.3 截图舞台底（9 张 .webp）
 
-当前 `renderers/guizang/recipes.py` **未使用**。`screenshot-treatment.md` 落地后，应通过 `.bg-asset-*` 类（已在 v0.14 模板内）引用：
+当前 `renderers/guizang/screenshot_treatment.py` 会在截图类素材命中时选择 `.bg-asset-*` / `.frame-shot` / device 包裹；多截图墙与更细的截图语义分配仍未完成。可用舞台底：
 
 - Editorial → `style-a/*.webp`
 - Swiss → `style-b/*.webp`
@@ -130,11 +131,13 @@ vendor/guizang/
 |---|---|---|---|---|
 | 2026-06-14 | v0.14 | Chora distribution 接入补全 | Codex | 首版 vendoring：补 SKILL.md / PRODUCT.md / HANDOFF.md / README.{md,en.md} / agents/ / references/ 15 项 / assets/screenshot-backgrounds/ 9 张；保留本地两个 template HTML 白空间修复 |
 | 2026-06-15 | v0.14 | vendor 校对 | Codex | LICENSE 实为 AGPL-3.0（§ 1/§ 2 原误记 ISC 已正）；template-editorial-card.html 增 midnight-ink 主题两补丁（`.mag-bg` opacity.66 + saturate.86 contrast.9；`.cta-qr img` invert(1) contrast(1.04)）未入 § 3 表格（待补） |
+| 2026-06-17 | v0.14 | Chora 接入状态校对 | Codex | § 4 更新 category / screenshot / image-overlay / AI fallback 实现状态；记录 Playwright 主路径 + wkhtml 兜底策略由 Chora 运行时负责 |
 
 ---
 
-## 6. 上游更新上游的 TODO
+## 6. 上游接入剩余 TODO
 
-- 上游 `category-cookbook.md` 已声明 11 品类；Chora `category_router` 当前仅 4 类，需扩（不在 vendoring 范围，属 Chora 端工作，参见 `docs/distribution-pipeline.md` 路线图）。
-- 上游 `image-overlay.md` 主体映射要求读图（建议用 Chora 已有的 `generate_cover.py` + 视觉模型）；vendoring 不变。
-- 上游 `screenshot-treatment.md` 截图四件套 6 参数；同上，Chora 端实现。
+- Mapbox Static / OSM 地图组件仍未接入，旅行/空间类内容暂不能生成真实路线/地图卡。
+- image overlay 的 vision 通道默认关闭；仍需补相对路径素材的常规覆盖、localized tint 细化与 360px 缩略图可读性检查。
+- screenshot treatment 已有单图框架，仍需补多截图墙、截图语义分配与更多真实 UI 样例。
+- AI fallback 已接入 candidates/download，但 category/theme 传入仍需收束，prompt 与 provenance 需继续强化。

@@ -120,9 +120,9 @@
     .poster.wide   { width: 2100px; height:  900px; }
     .poster figure { margin: 0; }
 
-    .poster.xhs    .content { padding: var(--sp-12) var(--sp-11); }
-    .poster.square .content { padding: var(--sp-11) var(--sp-11); }
-    .poster.wide   .content { padding: var(--sp-11) var(--sp-13); }
+    .poster.xhs    .content { box-sizing: border-box; padding: var(--sp-12) var(--sp-11); }
+    .poster.square .content { box-sizing: border-box; padding: var(--sp-11) var(--sp-11); }
+    .poster.wide   .content { box-sizing: border-box; padding: var(--sp-11) var(--sp-13); }
     .content { position: relative; width: 100%; height: 100%; z-index: 2; }
 
     /* Optional decorative layers — opt in per poster */
@@ -164,6 +164,9 @@
       font-size: 240px;
       line-height: 1.02;
       letter-spacing: -.02em;
+      white-space: pre-line;
+      word-break: keep-all;
+      overflow-wrap: normal;
       margin: 0;
       color: var(--ink);
     }
@@ -173,6 +176,9 @@
       font-size: 180px;
       line-height: 1.05;
       letter-spacing: -.015em;
+      white-space: pre-line;
+      word-break: keep-all;
+      overflow-wrap: normal;
       margin: 0;
       color: var(--ink);
     }
@@ -182,6 +188,21 @@
       font-size: 120px;
       line-height: 1.08;
       letter-spacing: -.01em;
+      white-space: pre-line;
+      word-break: keep-all;
+      overflow-wrap: normal;
+      margin: 0;
+      color: var(--ink);
+    }
+    .h-display {
+      font-family: var(--sans);
+      font-weight: 300;
+      font-size: 120px;
+      line-height: 1.08;
+      letter-spacing: -.01em;
+      white-space: pre-line;
+      word-break: keep-all;
+      overflow-wrap: normal;
       margin: 0;
       color: var(--ink);
     }

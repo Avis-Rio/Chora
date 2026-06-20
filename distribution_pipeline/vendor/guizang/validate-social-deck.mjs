@@ -20,8 +20,6 @@ import { chromium } from "playwright";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import fs from "node:fs";
-import os from "node:os";
-import { spawn } from "node:child_process";
 
 const args = process.argv.slice(2);
 let target = null;
@@ -45,84 +43,16 @@ if (!fs.existsSync(htmlPath)) {
 }
 
 const url = "file://" + htmlPath;
-const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-
-async function waitForCdpEndpoint(port) {
-  for (let i = 0; i < 100; i++) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`);
-      if (response.ok) return `http://127.0.0.1:${port}`;
-    } catch (_) {}
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error("Chrome CDP endpoint was not ready");
-}
-
-async function launchBrowser() {
-  const launchOptions = [
-    { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] },
-  ];
-  if (fs.existsSync(chromePath)) {
-    launchOptions.push({
-      executablePath: chromePath,
-      args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
-    });
-  }
-  let launchError = null;
-  for (const options of launchOptions) {
-    try {
-      const browser = await chromium.launch(options);
-      return { browser, cleanup: async () => { await browser.close(); } };
-    } catch (error) {
-      launchError = error;
-    }
-  }
-  try {
-    if (!fs.existsSync(chromePath)) throw launchError;
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "guizang-chrome-"));
-    const port = 40000 + Math.floor(Math.random() * 20000);
-    const child = spawn(chromePath, [
-      "--headless=new",
-      "--disable-gpu",
-      "--no-sandbox",
-      "--no-first-run",
-      "--no-default-browser-check",
-      `--remote-debugging-port=${port}`,
-      `--user-data-dir=${userDataDir}`,
-      "about:blank",
-    ], { stdio: "ignore" });
-    const endpoint = await waitForCdpEndpoint(port);
-    const browser = await chromium.connectOverCDP(endpoint);
-    return {
-      browser,
-      cleanup: async () => {
-        try { await browser.close(); } catch (_) {}
-        try { child.kill("SIGTERM"); } catch (_) {}
-        try { fs.rmSync(userDataDir, { recursive: true, force: true }); } catch (_) {}
-      },
-    };
-  } catch (error) {
-    throw error;
-  }
-}
-
-async function waitForReady(page) {
-  await page.waitForLoadState("domcontentloaded");
-  await Promise.race([
-    page.evaluate(() => document.fonts && document.fonts.ready),
-    page.waitForTimeout(3000),
-  ]).catch(() => {});
-  await page.waitForTimeout(1200);
-}
-
-const { browser, cleanup } = await launchBrowser();
+const browser = await chromium.launch({
+  args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+});
 const ctx = await browser.newContext({
   viewport: { width: 1400, height: 1700 },
   deviceScaleFactor: 1,
 });
 const page = await ctx.newPage();
-await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
-await waitForReady(page);
+await page.goto(url, { waitUntil: "networkidle" });
+await page.waitForTimeout(1200);
 
 const style = styleOverride || await page.evaluate(() => {
   const html = document.documentElement;
@@ -382,7 +312,7 @@ for (const s of sections) {
   report.push({ meta, fails, warns });
 }
 
-await cleanup();
+await browser.close();
 
 let totalFail = 0, totalWarn = 0;
 const ruleCounts = new Map();
