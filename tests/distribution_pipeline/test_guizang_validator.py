@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 
 from distribution_pipeline.renderers.guizang.validator import (
+    _DEFAULT_PLAYWRIGHT_BROWSERS,
     PROJECT_PLAYWRIGHT_BROWSERS,
     parse_validator_output,
     review_static_guizang_html,
@@ -118,6 +119,22 @@ def test_review_static_guizang_html_rejects_visible_scaffold_labels(tmp_path):
     assert any("scaffold label visible" in line for line in status["lines"])
 
 
+def test_review_static_guizang_html_rejects_visible_proxy_placeholders(tmp_path):
+    (tmp_path / "index.html").write_text(
+        """
+        <section class="poster" id="xhs-04">
+          <div data-metric-source="proxy">P01</div>
+        </section>
+        """,
+        encoding="utf-8",
+    )
+
+    status = review_static_guizang_html(tmp_path, mode="swiss")
+
+    assert status["status"] == "fail"
+    assert any("proxy placeholder visible" in line for line in status["lines"])
+
+
 def test_run_guizang_validator_records_failure_without_swallowing(tmp_path, monkeypatch):
     (tmp_path / "index.html").write_text("<section>No overlay</section>", encoding="utf-8")
     captured = {}
@@ -139,8 +156,10 @@ def test_run_guizang_validator_records_failure_without_swallowing(tmp_path, monk
     assert status["fail_count"] == 1
     assert "FAIL R1 overflow" in status["stdout"]
     assert status["static_review"]["status"] == "pass"
-    if Path(PROJECT_PLAYWRIGHT_BROWSERS).exists():
-        assert captured["env"]["PLAYWRIGHT_BROWSERS_PATH"] == str(PROJECT_PLAYWRIGHT_BROWSERS)
+    expected_candidates = (*_DEFAULT_PLAYWRIGHT_BROWSERS, PROJECT_PLAYWRIGHT_BROWSERS)
+    expected = next((candidate for candidate in expected_candidates if Path(candidate).exists()), None)
+    if expected:
+        assert captured["env"]["PLAYWRIGHT_BROWSERS_PATH"] == str(expected)
 
 
 def test_run_guizang_validator_skips_when_playwright_missing(tmp_path, monkeypatch):
@@ -150,6 +169,23 @@ def test_run_guizang_validator_skips_when_playwright_missing(tmp_path, monkeypat
             1,
             stdout="",
             stderr="Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'playwright'",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    status = run_guizang_validator(tmp_path, mode="editorial")
+
+    assert status["status"] == "skipped"
+    assert "Guizang validator requires Node.js and Playwright" in status["reason"]
+
+
+def test_run_guizang_validator_skips_when_playwright_browser_missing(tmp_path, monkeypatch):
+    def fake_run(args, check, capture_output, text, env):
+        return subprocess.CompletedProcess(
+            args,
+            1,
+            stdout="",
+            stderr="browserType.launch: Executable doesn't exist at /tmp/chrome\nLooks like Playwright was just installed or updated.",
         )
 
     monkeypatch.setattr(subprocess, "run", fake_run)

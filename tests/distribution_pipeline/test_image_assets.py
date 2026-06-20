@@ -389,7 +389,7 @@ def test_materialize_image_assets_avoids_reusing_same_web_candidate(tmp_path):
     ]
 
 
-def test_materialize_image_assets_generates_concept_fallback_for_evidence(tmp_path):
+def test_materialize_image_assets_plan_does_not_generate_concept_fallback(tmp_path):
     plan = {
         "version": 1,
         "status": "planned",
@@ -408,8 +408,6 @@ def test_materialize_image_assets_generates_concept_fallback_for_evidence(tmp_pa
 
     materialized = materialize_image_assets(plan, tmp_path / "assets")
 
-    selected = materialized["selected_assets"][0]
-    assert selected["provider"] == "chora-generated"
-    assert selected["status"] == "available"
-    assert selected["render_path"] == "assets/images/xhs-02-evidence.svg"
-    assert (tmp_path / "assets" / "images" / "xhs-02-evidence.svg").exists()
+    assert materialized["selected_assets"] == []
+    assert materialized["requests"][0].get("status") is None
+    assert not (tmp_path / "assets" / "images" / "xhs-02-evidence.svg").exists()

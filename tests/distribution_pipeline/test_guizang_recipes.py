@@ -624,6 +624,7 @@ def test_render_page_section_rejects_wrong_recipe_family():
         ("S10", "h-bar-chart"),
         ("S11", "stacked-ledger"),
         ("S12", "matrix-fill"),
+        ("S13", "Map · Route"),
     ],
 )
 def test_render_swiss_recipe_family_uses_distinct_structures(recipe, snippet):

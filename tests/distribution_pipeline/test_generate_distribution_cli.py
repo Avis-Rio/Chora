@@ -103,6 +103,35 @@ def test_guizang_renderer_receives_image_asset_mode(tmp_path, monkeypatch):
     assert captured["image_asset_mode"] == "download"
 
 
+def test_guizang_renderer_defaults_to_plan_image_assets(tmp_path, monkeypatch):
+    content_dir = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
+    captured = {}
+
+    def fake_render(package, package_dir, max_cards, mode, theme, image_asset_mode):
+        captured["image_asset_mode"] = image_asset_mode
+        xhs_dir = package_dir / "xhs"
+        xhs_dir.mkdir(parents=True, exist_ok=True)
+        for name in ("index.html", "post.md", "render.cjs"):
+            (xhs_dir / name).write_text(name, encoding="utf-8")
+        return [xhs_dir / "index.html"]
+
+    monkeypatch.setattr("distribution_pipeline.generate_distribution.render_guizang_xhs_package", fake_render)
+    monkeypatch.setattr(
+        "distribution_pipeline.generate_distribution.run_guizang_validator",
+        lambda *_args, **_kwargs: {"status": "skipped"},
+    )
+
+    run(
+        content_dir=content_dir,
+        output_root=tmp_path,
+        platform="xhs",
+        renderer="guizang",
+        export_images=False,
+    )
+
+    assert captured["image_asset_mode"] == "plan"
+
+
 def test_guizang_renderer_exports_images_when_enabled(tmp_path, monkeypatch):
     content_dir = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
     exported = []

@@ -109,7 +109,7 @@ def test_build_xhs_pages_swiss_routes_specific_recipe_signals():
     assert recipes_by_insight[6] == "S08"
 
 
-def test_build_xhs_pages_swiss_does_not_use_image_hero_without_subject_map():
+def test_build_xhs_pages_swiss_does_not_force_image_recipe_without_subject_map():
     package = {
         "source": {"title": "产品复盘", "channel": "Chora"},
         "insights": [
@@ -136,7 +136,62 @@ def test_build_xhs_pages_swiss_does_not_use_image_hero_without_subject_map():
     pages = build_xhs_pages(package, mode="swiss")
 
     assert pages[1]["image"]["src"] == "assets/images/unsafe.jpg"
+    assert pages[1]["recipe"] == "S05"
+    assert pages[1]["recipe"] != "S04"
     assert pages[1]["recipe"] != "S08"
+
+
+def test_build_xhs_pages_resolves_relative_image_path_for_subject_map(tmp_path, monkeypatch):
+    xhs_dir = tmp_path / "package" / "xhs"
+    images_dir = xhs_dir / "assets" / "images"
+    images_dir.mkdir(parents=True)
+    image_path = images_dir / "evidence.jpg"
+    image_path.write_bytes(b"fake-image")
+    captured = {}
+
+    def fake_build_subject_map(image, page, image_path=None, cache_dir=None):
+        captured["image_path"] = image_path
+        captured["cache_dir"] = cache_dir
+        return {
+            "type": "landscape",
+            "auto_generated": False,
+            "focus": "center",
+            "safe_zone": "upper-left text block",
+        }
+
+    monkeypatch.setattr(
+        "distribution_pipeline.renderers.guizang.page_planner.build_subject_map",
+        fake_build_subject_map,
+    )
+    package = {
+        "source": {"title": "产品复盘", "channel": "Chora"},
+        "insights": [
+            {
+                "index": 1,
+                "title": "图像可以进入 vision。",
+                "body": "相对路径也应该解析为真实本地文件。",
+            }
+        ],
+        "philosophical_epilogue": {},
+        "image_assets": {
+            "_render_root": str(xhs_dir),
+            "selected_assets": [
+                {
+                    "asset_id": "evidence",
+                    "status": "available",
+                    "render_path": "assets/images/evidence.jpg",
+                    "target_pages": ["xhs-02"],
+                    "target_insight_index": 1,
+                }
+            ],
+        },
+    }
+
+    pages = build_xhs_pages(package, mode="swiss")
+
+    assert pages[1]["image"]["subject_map"]["type"] == "landscape"
+    assert captured["image_path"] == image_path
+    assert captured["cache_dir"] == images_dir
 
 
 def test_build_xhs_pages_turns_long_cover_title_into_growth_hook(tmp_path):
@@ -484,6 +539,27 @@ def test_build_xhs_pages_swiss_extracts_metric_tokens_for_data_visuals():
     assert "uses_extracted_metrics" in pages[1]["qa_flags"]
 
 
+def test_build_xhs_pages_swiss_routes_single_metric_to_file_card():
+    package = {
+        "source": {"title": "Token 经济学", "channel": "硅谷101", "tags": ["Technology"]},
+        "insights": [
+            {
+                "index": 1,
+                "title": "价格分化创造套利空间",
+                "body": "中美模型 50 倍的价差，不只是竞争威胁，更是商业机会。",
+            }
+        ],
+        "philosophical_epilogue": {},
+        "image_assets": {},
+    }
+
+    pages = build_xhs_pages(package, mode="swiss")
+
+    assert pages[1]["metric_tokens"][0]["raw"] == "50 倍"
+    assert pages[1]["recipe"] == "S03"
+    assert pages[1]["recipe"] != "S09"
+
+
 def test_build_xhs_pages_swiss_avoids_kpi_tower_without_real_metric_tokens():
     package = {
         "source": {"title": "Token 经济学", "channel": "硅谷101", "tags": ["Technology"]},
@@ -503,6 +579,27 @@ def test_build_xhs_pages_swiss_avoids_kpi_tower_without_real_metric_tokens():
     assert pages[1]["metric_tokens"] == []
     assert pages[1]["recipe"] != "S09"
     assert "uses_proxy_metrics" not in pages[1]["qa_flags"]
+
+
+def test_build_xhs_pages_swiss_pipeline_expands_chinese_enumeration():
+    package = {
+        "source": {"title": "Token 经济学", "channel": "硅谷101", "tags": ["Technology"]},
+        "insights": [
+            {
+                "index": 1,
+                "title": "中国模型出海的结构性优势",
+                "body": "低电价、MoE 架构、云厂商垂直整合，三重因素叠加。",
+            }
+        ],
+        "philosophical_epilogue": {},
+        "image_assets": {},
+    }
+
+    pages = build_xhs_pages(package, mode="swiss")
+
+    assert pages[1]["recipe"] == "S06"
+    assert [item["title"] for item in pages[1]["items"]] == ["低电价", "MoE 架构", "云厂商垂直整合"]
+    assert [item["note"] for item in pages[1]["items"]] == ["成本底座", "效率结构", "供给链路"]
 
 
 def test_build_xhs_pages_swiss_uses_comparison_recipe_for_strong_vs_weak_models():
@@ -529,6 +626,25 @@ def test_content_profile_detects_solitude_psychology():
     insights = [{"title": "孤独与孤寂的根本区别", "body": "孤独是主动选择。"}]
 
     assert content_profile(source, insights) == "solitude-psychology"
+
+
+def test_build_xhs_pages_swiss_closing_stays_takeaway_ledger_after_takeaway_page():
+    package = {
+        "source": {"title": "Token 经济学", "channel": "硅谷101", "tags": ["Technology"]},
+        "insights": [
+            {"index": 1, "title": "判断一", "body": "这是一段普通论述。"},
+            {"index": 2, "title": "判断二", "body": "这是一段普通论述。"},
+            {"index": 3, "title": "判断三", "body": "这是一段普通论述。"},
+        ],
+        "philosophical_epilogue": {},
+        "image_assets": {},
+    }
+
+    pages = build_xhs_pages(package, mode="swiss")
+
+    assert pages[-2]["recipe"] == "S07"
+    assert pages[-1]["role"] == "closing"
+    assert pages[-1]["recipe"] == "S07"
 
 
 def test_build_xhs_pages_compresses_growth_title_without_losing_original():
@@ -582,3 +698,45 @@ def test_build_xhs_pages_routes_philosophy_to_hero_question():
 
     assert pages[-2]["role"] == "philosophy"
     assert pages[-2]["recipe"] == "M13"
+
+
+def test_build_xhs_pages_swiss_routes_geographic_insight_to_map():
+    package = {
+        "source": {"title": "黄金东移与全球权力转移", "channel": "硅谷101", "tags": ["Economics"]},
+        "insights": [
+            {
+                "index": 1,
+                "title": "黄金正在从西方流向东方",
+                "body": "中国、印度和中东央行持续增持黄金，而欧美投资者ETF持仓下降。",
+            }
+        ],
+        "philosophical_epilogue": {},
+        "image_assets": {},
+    }
+
+    pages = build_xhs_pages(package, mode="swiss")
+
+    assert pages[1]["recipe"] == "S13"
+    assert pages[1]["map_route"]["origin"] == "西方"
+    assert pages[1]["map_route"]["destination"] == "印度"
+    assert "中国" in pages[1]["map_route"]["stops"]
+
+
+def test_build_xhs_pages_swiss_map_does_not_override_metric_signal():
+    package = {
+        "source": {"title": "Token 经济学", "channel": "硅谷101", "tags": ["Technology"]},
+        "insights": [
+            {
+                "index": 1,
+                "title": "价格分化创造套利空间",
+                "body": "中美模型 50 倍的价差，不只是竞争威胁，更是商业机会。",
+            }
+        ],
+        "philosophical_epilogue": {},
+        "image_assets": {},
+    }
+
+    pages = build_xhs_pages(package, mode="swiss")
+
+    # metric 信号强于 map 信号，应走 S03 而非 S13
+    assert pages[1]["recipe"] == "S03"

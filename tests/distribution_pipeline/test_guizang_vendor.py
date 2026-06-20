@@ -9,7 +9,7 @@ def test_guizang_vendor_assets_exist():
         "LICENSE",
         "template-editorial-card.html",
         "template-swiss-card.html",
-        "magazine-bg-webgl.js",
+        "assets/magazine-bg-webgl.js",
         "validate-social-deck.mjs",
         "README.md",
     ]

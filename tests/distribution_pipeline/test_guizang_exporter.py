@@ -39,7 +39,10 @@ def test_export_guizang_images_returns_output_pngs(tmp_path, monkeypatch):
 
     assert calls[0][0] == ["node", "render.cjs"]
     assert calls[0][1] == xhs_dir
-    assert calls[0][4]["PLAYWRIGHT_BROWSERS_PATH"] == str(PROJECT_PLAYWRIGHT_BROWSERS)
+    # 優先已存在的用戶緩存（macOS），否則項目緩存
+    from distribution_pipeline.renderers.guizang.exporter import _resolve_default_playwright_browsers
+    expected = str(_resolve_default_playwright_browsers() or PROJECT_PLAYWRIGHT_BROWSERS)
+    assert calls[0][4]["PLAYWRIGHT_BROWSERS_PATH"] == expected
     assert images == [image_path]
 
 
@@ -72,3 +75,30 @@ def test_export_guizang_images_reports_missing_playwright(tmp_path, monkeypatch)
 
     with pytest.raises(RuntimeError, match="Guizang image export requires Node.js and Playwright"):
         export_guizang_images(tmp_path)
+
+
+def test_export_guizang_images_generates_360px_thumbnails(tmp_path, monkeypatch):
+    pytest.importorskip("PIL", reason="Pillow not installed")
+    from PIL import Image
+
+    xhs_dir = tmp_path / "xhs"
+    output_dir = xhs_dir / "output"
+    output_dir.mkdir(parents=True)
+    (xhs_dir / "render.cjs").write_text("// test", encoding="utf-8")
+
+    image_path = output_dir / "xhs-01-cover.png"
+    img = Image.new("RGB", (1080, 1440), color=(245, 241, 232))
+    img.save(image_path, "PNG")
+
+    def fake_run(args, cwd, check, text, env, timeout):
+        return subprocess.CompletedProcess(args, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    images = export_guizang_images(tmp_path)
+
+    thumb_path = output_dir / "thumbnails" / "xhs-01-cover_thumb360.png"
+    assert thumb_path in images
+    assert thumb_path.exists()
+    with Image.open(thumb_path) as thumb:
+        assert thumb.size[0] == 360

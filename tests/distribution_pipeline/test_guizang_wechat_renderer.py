@@ -14,6 +14,7 @@ def test_render_guizang_wechat_package_writes_cover_pair(tmp_path):
         tmp_path / "pkg",
         mode="editorial",
         theme="auto",
+        image_asset_mode="plan",
     )
 
     wechat_dir = tmp_path / "pkg" / "wechat"
