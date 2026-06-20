@@ -26,6 +26,7 @@ import rewrite_service
 from config_loader import load_sources_config
 from generate_cover import generate_podcast_cover
 from distribution_pipeline.automation import generate_distribution_after_rewrite
+from xiaoyuzhou_service import get_episode_metadata, extract_episode_id
 
 def load_config():
     return load_sources_config('config/sources.yaml')
@@ -36,84 +37,22 @@ def sanitize_filename(name):
     name = name.replace(' ', '_')
     return name[:50]
 
-def extract_episode_id(url):
-    """Extract episode ID from xiaoyuzhou URL."""
-    match = re.search(r'/episode/([a-zA-Z0-9]+)', url)
-    if match:
-        return match.group(1)
-    return None
-
-def get_episode_metadata(episode_id):
-    """Fetch episode metadata from xiaoyuzhou page."""
-    url = f"https://www.xiaoyuzhoufm.com/episode/{episode_id}"
-    print(f"Fetching metadata from {url}...")
-    
+def get_episode_metadata_wrapper(url_or_id):
+    """Thin wrapper around xiaoyuzhou_service for dict compatibility."""
     try:
-        headers = ['-H', 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36']
-        result = subprocess.run(['curl', '-s', '-L'] + headers + [url], capture_output=True, text=True)
-        html = result.stdout
-        
-        # Try to extract from __NEXT_DATA__ (contains more detailed info including description)
-        next_data_match = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', html, re.DOTALL)
-        description = ""
-        guests = ""
-        
-        if next_data_match:
-            try:
-                next_data = json.loads(next_data_match.group(1))
-                episode = next_data.get('props', {}).get('pageProps', {}).get('episode', {})
-                description = episode.get('description', '')
-                
-                # 尝试从 trial.segment 获取音频 URL (通常包含 auth_key，对于付费节目必选)
-                audio_url = episode.get('trial', {}).get('segment', '')
-                if not audio_url:
-                    # 备选：从 enclosure 获取
-                    audio_url = episode.get('enclosure', {}).get('url', '')
-                
-                # 如果还是没有，尝试从 associatedMedia 获取
-                if not audio_url:
-                     audio_url = episode.get('associatedMedia', {}).get('contentUrl', '')
-
-                # Extract guests from description
-                guests = extract_guests_from_description(description)
-                
-                # 提取标题和日期
-                title = episode.get('title', 'Unknown Episode')
-                pub_date_raw = episode.get('pubDate', '')
-                pub_date = pub_date_raw[:10] if pub_date_raw else datetime.now().strftime('%Y-%m-%d')
-                
-                # 提取频道名
-                channel = episode.get('podcast', {}).get('title', 'Unknown')
-
-                return {
-                    'title': title,
-                    'channel': channel,
-                    'upload_date': pub_date,
-                    'audio_url': audio_url,
-                    'episode_id': episode_id,
-                    'guests': guests,
-                    'description': description
-                }
-            except Exception as e:
-                print(f"  Warning: Failed to parse Next.js data: {e}")
-                pass
-        
-        # Fallback: extract from HTML title tag
-        title_match = re.search(r'<title>(.*?)</title>', html)
-        title = title_match.group(1) if title_match else 'Unknown Episode'
-        
+        meta = get_episode_metadata(url_or_id)
         return {
-            'title': title,
-            'channel': 'Unknown',
-            'upload_date': datetime.now().strftime('%Y-%m-%d'),
-            'audio_url': '',
-            'episode_id': episode_id,
-            'guests': guests,
-            'description': description
+            'title': meta.title,
+            'channel': meta.channel,
+            'upload_date': meta.upload_date,
+            'audio_url': meta.audio_url,
+            'episode_id': meta.episode_id,
+            'guests': meta.guests,
+            'description': meta.description,
+            'source_url': meta.source_url,
         }
-        
-    except Exception as e:
-        print(f"Error fetching metadata: {e}")
+    except Exception as exc:
+        print(f"Error fetching metadata: {exc}")
         return None
 
 
@@ -350,7 +289,7 @@ def process_podcast(podcast_url):
     
     # 1. Get Metadata
     print("\n[1/5] Fetching Metadata...")
-    metadata = get_episode_metadata(episode_id)
+    metadata = get_episode_metadata_wrapper(episode_id)
     if not metadata:
         print("❌ Failed to get metadata. Aborting.")
         return
