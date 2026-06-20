@@ -1,0 +1,19 @@
+# Chora Python 运行时依赖
+# 安装：pip install -r requirements.txt
+#
+# 注意：yt-dlp 提供 CLI 命令，本项目中通过 subprocess 调用。
+# 系统仍需安装 ffmpeg（用于音频切分）。
+
+# 核心运行时
+groq>=0.4.0
+PyYAML>=6.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+Pillow>=10.0.0
+
+# YouTube 内容获取
+yt-dlp>=2024.0.0
+youtube-transcript-api>=0.6.0
+
+# 分发流水线（PNG 导出）
+playwright>=1.40.0

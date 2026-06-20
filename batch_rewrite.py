@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import rewrite_service
+from distribution_pipeline.automation import generate_distribution_after_rewrite
 from utils.content_validator import check_directory, scan_content_archive
 
 
@@ -49,7 +50,7 @@ def categorize_by_size(transcript_paths: list) -> dict:
     return categories
 
 
-def process_batch(tasks: list, dry_run: bool = False) -> dict:
+def process_batch(tasks: list, dry_run: bool = False, generate_distribution: bool = False) -> dict:
     """
     处理一批 rewrite 任务
 
@@ -80,6 +81,8 @@ def process_batch(tasks: list, dry_run: bool = False) -> dict:
             size = os.path.getsize(output_path)
             if size > 100:  # 文件存在且有意义（非空）
                 print(f"⏭️  已存在 rewritten.md ({size} bytes)，跳过")
+                if generate_distribution and not dry_run:
+                    generate_distribution_after_rewrite(Path(output_path).parent, context="batch_rewrite:skipped")
                 results['skipped'] += 1
                 continue
 
@@ -97,6 +100,8 @@ def process_batch(tasks: list, dry_run: bool = False) -> dict:
 
                 if success:
                     print(f"✅ 成功: {content_name}")
+                    if generate_distribution:
+                        generate_distribution_after_rewrite(Path(output_path).parent, context="batch_rewrite")
                     results['success'] += 1
                 else:
                     print(f"❌ 失败: {content_name}")
@@ -175,6 +180,11 @@ def main():
         default='content_archive',
         help='内容存档根目录'
     )
+    parser.add_argument(
+        '--generate-distribution',
+        action='store_true',
+        help='rewrite 成功或已存在后生成 Guizang 小红书分发包'
+    )
 
     args = parser.parse_args()
 
@@ -252,7 +262,7 @@ def main():
             for t in all_tasks
             if t['transcript'] in small_transcripts
         ]
-        results1 = process_batch(small_tasks)
+        results1 = process_batch(small_tasks, generate_distribution=args.generate_distribution)
 
         print(f"\n小文件批次完成: {results1['success']} 成功, {results1['skipped']} 跳过, {results1['failed']} 失败")
 
@@ -276,7 +286,7 @@ def main():
 
         for i, task in enumerate(large_tasks, 1):
             print(f"\n[{i}/{len(large_tasks)}] 处理大文件任务")
-            result = process_batch([task])
+            result = process_batch([task], generate_distribution=args.generate_distribution)
             time.sleep(BATCH_DELAY)
 
     # 总结

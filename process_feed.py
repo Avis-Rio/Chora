@@ -8,11 +8,13 @@ import fetch_feed
 from youtube_service import get_youtube_transcript
 from rewrite_service import rewrite_content
 from generate_cover import generate_cover
+from distribution_pipeline.automation import generate_distribution_after_rewrite
+from config_loader import load_sources_config
+from utils.archive_cleanup import find_removable_files
 
 # Load Config
 def load_config():
-    with open('config/sources.yaml', 'r') as f:
-        return yaml.safe_load(f)
+    return load_sources_config('config/sources.yaml')
 
 def load_state():
     if not os.path.exists('config/state.yaml'):
@@ -135,6 +137,7 @@ def process_item(item, config, state):
         success = rewrite_content(transcript_path, metadata_path, rewritten_path)
         if success:
             print("Rewrite completed.")
+            generate_distribution_after_rewrite(output_dir, context="process_feed")
             
             # 6. Update State
             if item['id'] not in state['processed_ids']:
@@ -160,13 +163,30 @@ def main():
     # 3. Process
     config = load_config()
     state = load_state()
-    
+
     for item in items:
         try:
             process_item(item, config, state)
         except Exception as e:
             print(f"Error processing {item['title']}: {e}")
             continue
+
+    # 4. Cleanup old audio files (free disk space)
+    cleanup_days = config.get('settings', {}).get('cleanup_audio_days', 30)
+    if cleanup_days > 0:
+        output_dir = config.get('settings', {}).get('output_dir', './content_archive')
+        try:
+            removable = find_removable_files(output_dir, cleanup_days, remove_covers=False)
+            total_size = sum(size for _, size, _ in removable)
+            if removable:
+                print(f"\n🧹 自动清理：删除 {len(removable)} 个超过 {cleanup_days} 天的音频文件，释放 {total_size / (1024**2):.1f} MB")
+                for path, size, _ in removable:
+                    try:
+                        os.remove(path)
+                    except OSError as e:
+                        print(f"  ⚠️ 删除失败 {path}: {e}")
+        except Exception as e:
+            print(f"⚠️ 自动清理失败: {e}")
 
 if __name__ == "__main__":
     main()

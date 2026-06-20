@@ -22,6 +22,8 @@ license: MIT
 - **`config/state.yaml`**: 记录已处理内容的 ID，防止重复。
 - **`config/rewrite-prompt.md`**: AI 改写提示词模板，包含严格的 XML 标签输出指令。
 
+**安全提示**：API 密钥优先从环境变量读取（`.env` 文件）。请将真实密钥写入仓库根目录的 `.env` 文件（已被 `.gitignore` 忽略），并在 `config/sources.yaml` 中保留占位符。参见 `.env.example`。
+
 ### 2. 过滤与去重
 - **关键词过滤**: 仅处理标题包含 `include_keywords` 的内容。
 - **ID 去重**: 检查 `state.yaml` 中的 `processed_ids`。
@@ -32,7 +34,7 @@ license: MIT
 ## 🛠️ 工作流步骤 (完整更新版)
 
 ### 步骤 0：初始化
-1.  读取 `config/sources.yaml` 获取 API 密钥和设置。
+1.  读取 `config/sources.yaml` 及环境变量（`.env`）获取 API 密钥和设置。
 2.  确定模式（单 URL 或 批量模式）。
 
 ### 步骤 1：获取元数据与字幕
@@ -85,7 +87,10 @@ license: MIT
     - 提取 `<METADATA_SECTION>` → 合并至 `metadata.md`（**始终保留原始标题**，AI 只补充来源、发布时间、嘉宾、金句）。
     - 提取 `<REWRITE_SECTION>` → 保存至 `rewritten.md`。
 2.  **字数统计**: 运行 `utils/word_count.py` 更新 `rewritten.md` 中的字数信息。
-3.  **清理**: 删除临时文件。
+3.  **Guizang 小红书分发包**: `rewritten.md` 成功后自动调用 `distribution_pipeline.automation.generate_distribution_after_rewrite()`，生成 `distribution/{内容目录名}/xhs/index.html`、`xhs/post.md`，并在浏览器环境可用时导出 `xhs/output/*.png`。
+4.  **清理**: 删除临时文件。
+
+分发后处理遵循“记录并继续”：如果 Guizang 渲染、PNG 导出或 validator 失败，不要中断主流程；错误写入内容目录下的 `distribution_errors.log`。
 
 ### 步骤 5：状态更新
 - 将该内容的 ID 写入 `config/state.yaml` 的 `processed_ids` 列表中。
@@ -192,6 +197,9 @@ python3 batch_rewrite.py --dry-run
 
 # 处理最近 7 天的新内容
 python3 batch_rewrite.py --days 7
+
+# 补 rewrite 后同时生成 Guizang 小红书分发包
+python3 batch_rewrite.py --generate-distribution
 ```
 
 ### 3. 飞书同步前验证

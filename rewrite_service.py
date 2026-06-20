@@ -1,27 +1,14 @@
 import os
 import sys
-import yaml
 import json
 import re
 import requests
 import time
+from config_loader import load_sources_config
 from utils.word_count import update_rewritten_file
 
 def load_config():
-    config_path = 'config/sources.yaml'
-    if not os.path.exists(config_path):
-        print(f"错误: 找不到配置文件 {config_path}")
-        print(f"请从 config/sources.example.yaml 复制并填入 API 密钥")
-        return None
-    
-    with open(config_path, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    if not config:
-        print("错误: 配置文件为空")
-        return None
-    
-    return config
+    return load_sources_config('config/sources.yaml')
 
 def validate_api_config(config):
     """验证 API 配置是否有效"""

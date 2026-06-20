@@ -19,16 +19,16 @@ import sys
 import re
 import json
 import subprocess
-import yaml
 from datetime import datetime
 from groq import Groq
 import glob
 import rewrite_service
+from config_loader import load_sources_config
 from generate_cover import generate_podcast_cover
+from distribution_pipeline.automation import generate_distribution_after_rewrite
 
 def load_config():
-    with open('config/sources.yaml', 'r') as f:
-        return yaml.safe_load(f)
+    return load_sources_config('config/sources.yaml')
 
 def sanitize_filename(name):
     """Sanitize string to be safe for filenames."""
@@ -467,12 +467,16 @@ def process_podcast(podcast_url):
         if not cover_success:
             print("⚠️ Cover generation failed, but continuing...")
     
+    distribution_dir = generate_distribution_after_rewrite(output_dir, context="process_podcast")
+
     print(f"\n✅ Processing Complete! Output in: {output_dir}")
     print(f"   - Metadata: {metadata_path}")
     print(f"   - Transcript: {transcript_path}")
     print(f"   - Rewritten: {rewritten_path}")
     if os.path.exists(cover_path):
         print(f"   - Cover: {cover_path}")
+    if distribution_dir:
+        print(f"   - Distribution: {distribution_dir}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

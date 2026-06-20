@@ -13,6 +13,7 @@ from datetime import datetime
 import youtube_service
 import rewrite_service
 import subprocess
+from distribution_pipeline.automation import generate_distribution_after_rewrite
 
 def sanitize_filename(name):
     """Sanitize string to be safe for filenames."""
@@ -159,9 +160,12 @@ def process_video(video_id_or_url):
     success = rewrite_service.rewrite_content(transcript_path, metadata_path, rewritten_path)
 
     if success:
+        distribution_dir = generate_distribution_after_rewrite(output_dir, context="process_video")
         print(f"\n✅ Processing Complete! Output in: {output_dir}")
         print(f"   - Metadata: {metadata_path}")
         print(f"   - Rewritten: {rewritten_path}")
+        if distribution_dir:
+            print(f"   - Distribution: {distribution_dir}")
     else:
         print("\n❌ Rewrite failed.")
 

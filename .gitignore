@@ -19,6 +19,10 @@ config/*.yaml
 *.swp
 *.swo
 
+# Agent / skill conversation artifacts
+conversations/
+.baoyu-skills/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -30,6 +34,9 @@ Thumbs.db
 # Content archive (generated data)
 content_archive/
 content_export.json
+
+# Generated distribution packages
+distribution/
 
 # Frontend generated data (synced from archive)
 frontend/public/data/

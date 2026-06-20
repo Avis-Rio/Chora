@@ -8,19 +8,21 @@ import os
 import sys
 import json
 import requests
-import yaml
 import time
 import mimetypes
 from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from config_loader import load_feishu_config
 
 class FeishuService:
     """Feishu Bitable API wrapper."""
     
     def __init__(self, config_path='config/feishu.yaml'):
         """Initialize with config file."""
-        self.config = self._load_config(config_path)
+        self.config = load_feishu_config(config_path)
+        if self.config is None:
+            self.config = {}
         self.access_token = None
         self.token_expires = 0
         
@@ -44,17 +46,6 @@ class FeishuService:
         except Exception as e:
             print(f"⚠️ Request failed: {e}")
             raise
-    
-    def _load_config(self, config_path):
-        """Load Feishu configuration."""
-        if not os.path.exists(config_path):
-            print(f"⚠️ Config not found: {config_path}")
-            print("Please create config/feishu.yaml with app_id, app_secret, base_id, table_id")
-            return {}
-        
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-        return config.get('feishu', {})
     
     def get_access_token(self):
         """Get tenant access token from Feishu API."""

@@ -26,6 +26,7 @@ settings:
   min_duration_minutes: 30
   date_range_days: 3
   output_dir: "./content_archive"
+  cleanup_audio_days: 30  # 自动删除超过 N 天的音频文件，0 表示关闭
 
 # 订阅源列表
 subscriptions:

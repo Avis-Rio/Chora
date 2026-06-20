@@ -1,4 +1,3 @@
-import yaml
 import os
 import json
 import subprocess
@@ -6,6 +5,7 @@ import re
 import sys
 from datetime import datetime, timedelta
 from youtube_service import get_youtube_transcript
+from config_loader import load_sources_config
 
 # 确保 Python 用户安装目录在 PATH 中
 user_bin = os.path.expanduser('~/Library/Python/3.9/bin')
@@ -17,24 +17,18 @@ CONFIG_PATH = 'config/sources.yaml'
 STATE_PATH = 'config/state.yaml'
 
 def load_config():
-    if not os.path.exists(CONFIG_PATH):
+    config = load_sources_config(CONFIG_PATH)
+    if config is None:
         print(f"错误: 找不到配置文件 {CONFIG_PATH}")
         print(f"请从 {CONFIG_PATH.replace('.yaml', '.example.yaml')} 复制并填入 API 密钥")
         return None
-    with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-        config = yaml.safe_load(f)
-    
-    # 验证必要的配置
-    if not config:
-        print("错误: 配置文件为空")
-        return None
-    
+
     # 检查 API 密钥是否为占位符
     api_keys = config.get('api_keys', {})
     llm_key = api_keys.get('llm', {}).get('api_key', '')
     if 'your_' in llm_key or not llm_key:
         print("⚠️ 警告: LLM API 密钥未配置，AI 改写功能将不可用")
-    
+
     return config
 
 def load_state():

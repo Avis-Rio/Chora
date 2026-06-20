@@ -5,16 +5,16 @@
 用法: python3 generate_cover.py <title> <output_path>
 """
 
-import yaml
+import os
 import json
 import requests
 import base64
-import os
 import sys
 import re
 import random
 import glob
 import time
+from config_loader import load_sources_config
 
 STYLES_DIR = os.path.join(os.getcwd(), "styles")
 # Ensure local styles dir exists and populate it if needed
@@ -28,8 +28,7 @@ if not os.path.exists(STYLES_DIR):
             shutil.copy(f, STYLES_DIR)
 
 def load_config():
-    with open('config/sources.yaml', 'r') as f:
-        return yaml.safe_load(f)
+    return load_sources_config('config/sources.yaml')
 
 
 def get_color_palette_for_topic(title):

@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-此文件为 Claude Code (claude.ai/code) 在此存储库中工作时提供指导。
+此文件为 Codex (Codex.ai/code) 在此存储库中工作时提供指导。
 
 ## 语言与沟通规范
 - **全程使用中文**：请务必全程使用中文与我对话。
@@ -21,7 +21,7 @@
 ## 命令
 
 ### 运行内容摘要器 (Content Feed Summarizer)
-主要工作流作为 Claude Code Skill 实现。触发方式：
+主要工作流作为 Codex Skill 实现。触发方式：
 ```bash
 # 处理单个 URL
 "处理这个视频：https://youtube.com/watch?v=VIDEO_ID"
@@ -54,36 +54,29 @@ python download_xyz.py <episode_url>
 ## 架构
 
 ### Skill 系统
-项目使用 **Claude Code Skills**（而非独立脚本）作为主要接口。Skills 位于 `skills/` 目录下：
+项目使用 **Codex Skills**（而非独立脚本）作为主要接口。Skills 位于 `skills/` 目录下：
 
 - **`content-feed-summarizer/`**：编排完整流水线的主要 Skill。
   - `SKILL.md`：Skill 定义，包含用于零干扰自动化的“静默模式协议 (Quiet Mode Protocol)”。
-  - `setup.md`：环境安装与 API 密钥配置指南。
-  - `examples/`：标准输出格式示例与反模式说明。
+  - `prompt.md`：可自定义的 AI 改写模板（中文格式，结构化）。
+  - `config-example.yaml`：批量处理的示例配置。
 
-- **`process-subscriptions/`**：批量订阅处理 Skill。
-  - `SKILL.md`：扫描 `config/sources.yaml` 中的所有订阅源并批量处理。
-
-- **`process-url/`**：单 URL 处理 Skill。
-  - `SKILL.md`：处理单个 YouTube 或小宇宙 URL。
+- **`podcast-cover-generator/`**：封面图生成配置。
+  - `sources.yaml`：Gemini API 凭据和各平台的默认提示词。
+  - `state.yaml`：处理状态跟踪。
 
 ### Python 工具脚本
 独立脚本提供了被 Skill 调用的构建块：
 
 - **`youtube_service.py`**：通过 yt-dlp 获取 YouTube 转录（VTT 解析、去重）。
-- **`process_video.py`**：YouTube 视频完整处理流程（元数据 → 封面 → 字幕 → 改写 → 分发）。
-- **`process_podcast.py`**：小宇宙播客完整处理流程（元数据 → 音频下载 → Groq Whisper 转录 → 改写 → 封面 → 分发）。
-  - 必要时使用 ffmpeg 将音频切分为 5 分钟片段。
+- **`transcribe_podcast.py`**：使用 Groq Whisper API 进行音频转录。
+  - 必要时将音频切分为 10 分钟的片段。
   - 使用 `whisper-large-v3` 模型。
   - 需要 `GROQ_API_KEY` 环境变量。
 - **`generate_cover.py`**：基于 Gemini 的图像生成。
-  - 从 `config/sources.yaml` 读取 API 配置（优先从 `.env` 环境变量读取）。
-  - 模型：`gemini-3.1-flash-image-preview`（可在 `.env` 中覆盖）。
-- **`fetch_feed.py`**：订阅源扫描与获取。
-- **`process_feed.py`**：批量处理入口。
-- **`feishu_service.py`**：飞书多维表格同步服务。
-- **`rewrite_service.py`**：AI 内容改写服务。
-- **`config_loader.py`**：统一配置加载器，支持 `.env` 环境变量覆盖 YAML 配置。
+  - 从 `skills/podcast-cover-generator/sources.yaml` 读取 API 配置。
+  - 模型：`gemini-3-pro-image-preview`。
+- **`download_xyz.py`**：小宇宙音频爬取工具。
 
 ### 输出结构
 内容存档在 `content_archive/` 目录下，结构如下：
@@ -111,11 +104,8 @@ Skill 遵循 **“记录并继续 (Log & Continue)”** 策略：
 
 ### API 依赖
 - **Groq API**：Whisper 转录（`GROQ_API_KEY` 环境变量）。
-- **Gemini API**：图像生成（`GEMINI_API_KEY` / `GEMINI_BASE_URL` / `GEMINI_MODEL` 环境变量，或 `config/sources.yaml`）。
-- **LLM API**：内容改写（`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` 环境变量，或 `config/sources.yaml`）。
-- **飞书 API**（可选）：表格同步（`FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_BASE_ID`, `FEISHU_TABLE_ID` 环境变量，或 `config/feishu.yaml`）。
-
-**安全提示**：敏感信息优先使用 `.env` 文件配置，`config/sources.yaml` 与 `config/feishu.yaml` 中仅保留占位符。
+- **Gemini API**：图像生成（在 `skills/podcast-cover-generator/sources.yaml` 中配置）。
+- **飞书 API**（可选）：表格同步（`FEISHU_APP_ID`, `FEISHU_APP_SECRET`, `FEISHU_TABLE_ID`）。
 
 ### 内容过滤
 - **时长过滤**：默认最小 30 分钟（在 YAML 中配置）。
@@ -154,11 +144,25 @@ Skill **从不请求确认**。它：
 
 ## 配置文件
 
-### `config/sources.example.yaml`
-全局配置模板，包含过滤规则、输出目录、订阅源列表示例。**API 密钥请通过 `.env` 环境变量配置，不要在此文件中填入真实密钥。**
+### `skills/content-feed-summarizer/config-example.yaml`
+```yaml
+filter:
+  min_duration_minutes: 30    # 跳过短于此时间的项
+  date_range_days: 7          # 批量模式：获取最近 N 天的内容
 
-### `.env.example`
-环境变量配置模板，包含所有敏感信息（API keys、飞书凭证）。复制为 `.env` 并填入真实值。`.env` 已被 `.gitignore` 忽略，不会提交到 Git。
+output_dir: "./content_archive"
+
+sources:
+  youtube:
+    - channel_id: "UCxxxxxx"
+      name: "硅谷101"
+  xiaoyuzhou:
+    - podcast_id: "abc123456"
+      name: "商业就是这样"
+```
+
+### `skills/podcast-cover-generator/sources.yaml`
+包含 Gemini API 凭据和平台特定的默认提示词。**请勿提交真实的 API 密钥。**
 
 ## 开发笔记
 
@@ -166,10 +170,10 @@ Skill **从不请求确认**。它：
 1. 将解析逻辑添加到相应的工具脚本。
 2. 更新 `SKILL.md` 第 1 步（获取内容与元数据）。
 3. 确保元数据提取返回：标题、上传日期、时长、缩略图、频道名称。
-4. 将源添加到 `config/sources.yaml` 或 `config/sources.example.yaml`。
+4. 将源添加到 `config-example.yaml`。
 
 ### 修改摘要结构
-编辑 `config/rewrite-prompt.md`。模板使用 `{{variable}}` 占位符：
+编辑 `skills/content-feed-summarizer/prompt.md`。模板使用 `{{variable}}` 占位符：
 - `{{title}}`：内容标题
 - `{{source}}`：平台名称 (youtube/xiaoyuzhou)
 - `{{channel_name}}`：频道/播客名称
@@ -178,34 +182,20 @@ Skill **从不请求确认**。它：
 ### 环境变量
 完整功能所需：
 ```bash
-GROQ_API_KEY=<your_groq_key>               # 用于音频转录
-GEMINI_API_KEY=<your_gemini_key>           # 用于封面生成
-GEMINI_BASE_URL=<your_gemini_base_url>     # 可选，覆盖默认 Gemini endpoint
-GEMINI_MODEL=<your_gemini_model>           # 可选，覆盖默认模型
-LLM_API_KEY=<your_llm_key>                 # 用于内容改写
-LLM_BASE_URL=<your_llm_base_url>           # 可选
-LLM_MODEL=<your_llm_model>                 # 可选
-FEISHU_APP_ID=<optional>                   # 用于飞书同步
+GROQ_API_KEY=<your_groq_key>           # 用于音频转录
+FEISHU_APP_ID=<optional>               # 用于飞书同步
 FEISHU_APP_SECRET=<optional>
-FEISHU_BASE_ID=<optional>
 FEISHU_TABLE_ID=<optional>
 ```
 
 ### Python 依赖
-使用 `requirements.txt` 安装：
-```bash
-pip install -r requirements.txt
-```
-
-关键库：
+关键库（按需安装）：
 - `yt-dlp`：YouTube 元数据和字幕下载
-- `youtube-transcript-api`：YouTube 字幕获取
 - `groq`：Groq API 客户端 (Whisper)
+- `pydub`：音频切分与处理
 - `requests`：HTTP 请求
-- `PyYAML`：YAML 配置解析
-- `python-dotenv`：自动加载 `.env` 环境变量
-- `playwright`：分发流水线 PNG 导出
-- `ffmpeg`：音频切分（系统依赖）
+- `pyyaml`：YAML 配置解析
+- `ffmpeg`：pydub 所需（系统依赖）
 
 ## 前端 Chóra
 
