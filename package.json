@@ -1,0 +1,12 @@
+{
+  "name": "chora-distribution-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local tooling for Chora Guizang distribution rendering",
+  "scripts": {
+    "guizang:install-browser": "playwright install chromium"
+  },
+  "devDependencies": {
+    "playwright": "^1.60.0"
+  }
+}
