@@ -91,17 +91,64 @@ class RecordMixin:
 
     @staticmethod
     def _feishu_type_to_internal(type_value):
-        """Map Feishu Bitable numeric/string type to internal type name."""
+        """Map Feishu Bitable numeric/string type to internal type name.
+
+        Feishu Bitable official type IDs (per docs.open.feishu.cn):
+
+        =====  ==================================================
+        ID     Internal type
+        =====  ==================================================
+        1      text
+        2      number
+        3      single_select
+        4      multi_select
+        5      date
+        7      **attachment**  (NOT checkbox — that is type 17)
+        11     user            (NOT attachment — that is type 7)
+        15     url
+        17     checkbox
+        =====  ==================================================
+
+        Pre-fix this table mapped ``7 → checkbox`` and ``11 → attachment``,
+        which silently corrupted attachment writes: ``_map_to_fields``
+        treated the cover file_token as a text string and Feishu rejected
+        the record with ``AttachFieldConvFail``. The two values were
+        swapped here to align with the official API. Operators who have
+        already-persisted rows that were written under the old mapping
+        can recover them by uploading the file_token via raw PUT as
+        ``{"封面": [{"file_token": "..."}]}``.
+        """
         mapping = {
             1: "text",
             2: "number",
             3: "single_select",
             4: "multi_select",
             5: "date",
-            7: "checkbox",
-            11: "attachment",
+            7: "attachment",
+            11: "user",
             15: "url",
+            17: "checkbox",
         }
         if isinstance(type_value, int):
             return mapping.get(type_value, "text")
-        return str(type_value).lower() if type_value else "text"
+        # Feishu also returns string type names from some endpoints
+        # (e.g. "Attachment", "Checkbox"). Normalise to internal form.
+        if isinstance(type_value, str):
+            normalised = type_value.strip().lower()
+            string_aliases = {
+                "text": "text",
+                "number": "number",
+                "single_select": "single_select",
+                "single-select": "single_select",
+                "singleselect": "single_select",
+                "multi_select": "multi_select",
+                "multi-select": "multi_select",
+                "multiselect": "multi_select",
+                "date": "date",
+                "attachment": "attachment",
+                "user": "user",
+                "url": "url",
+                "checkbox": "checkbox",
+            }
+            return string_aliases.get(normalised, normalised or "text")
+        return "text"
