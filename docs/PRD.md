@@ -23,7 +23,7 @@
 **当前架构观察**：
 - 项目以 Python 内容处理流水线为主，静态前端展示与飞书同步为辅
 - 存在两类主要入口：
-  - 批量订阅入口：`fetch_feed.py` / `process_feed.py`
+  - 批量订阅入口：`fetch_feed.py`
   - 单条内容入口：`process_video.py` / `process_podcast.py`
 - 两类入口最终都会沉淀到 `content_archive/{日期}/{平台}_{频道}_{标题}/`
 - 归档核心文件稳定为：`metadata.md`、`transcript.md`、`rewritten.md`、`cover.*`

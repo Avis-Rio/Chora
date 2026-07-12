@@ -131,7 +131,7 @@
 
 ### 14.1 Daily 后处理必须记录并继续
 
-- `process_video.py`、`process_podcast.py`、`process_feed.py` 在 `rewritten.md` 成功生成后自动触发 Guizang XHS 分发包。
+- `process_video.py`、`process_podcast.py` 在 `rewritten.md` 成功生成后自动触发 Guizang XHS 分发包。
 - 分发失败不能中断主内容归档；错误必须写入当前内容目录的 `distribution_errors.log`。
 - 批量补 rewrite 默认不自动生图；需要使用 `python3 batch_rewrite.py --generate-distribution` 显式开启。
 - 自动后处理默认走 `platform=xhs`、`renderer=guizang`、`guizang_mode=auto`。

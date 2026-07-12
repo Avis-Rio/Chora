@@ -6,11 +6,17 @@ license: MIT
 
 # 内容摘要器 (Content Feed Summarizer)
 
-## 🤫 执行协议
+> **本 SKILL 是工作流权威定义**——完整 7 步工作流（步骤 0-5）在这里独有。共同契约（Quiet Mode、Log & Continue、飞书同步等）见 [`ARCHITECTURE.md` §3](../ARCHITECTURE.md)。两个薄入口 SKILL（`process-url` / `process-subscriptions`）通过引用本文件获得工作流细节。
 
-1.  **URL 模式 (自动执行)**：如果用户直接提供 URL，**无需确认**，立即开始处理。
-2.  **批量模式 (需确认)**：如果用户要求“运行订阅”或“处理更新”，在扫描完待处理清单后，**必须列出清单并请求用户确认**后再开始处理。
-3.  **静默处理**：一旦开始处理某个项目，遵循“记录并继续”原则，不再请求确认。
+**入口 SKILL 协同**：
+| SKILL | 输入 | 用户交互 | 谁负责"工作流"细节 |
+|---|---|---|---|
+| 本文件（`content-feed-summarizer`）| 协议权威 | — | **是**（步骤 0-5 在 §下方） |
+| [`process-url`](../process-url/SKILL.md) | 单 URL | 无确认 | 引用 ARCHITECTURE + 本文件 |
+| [`process-subscriptions`](../process-subscriptions/SKILL.md) | 订阅源 + 扫描 | **必须确认** | 引用 ARCHITECTURE + 本文件 |
+
+**Quiet Mode 协议**（3 规则）：见 [ARCHITECTURE.md §3.1](../ARCHITECTURE.md#31-quiet-mode-协议)。
+**错误处理策略**：见 [ARCHITECTURE.md §3.3](../ARCHITECTURE.md#33-错误处理log--continue)。
 
 ---
 
