@@ -35,6 +35,15 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: Smoke-test imports
+        env:
+          GROQ_API_KEY: ci-stub
+          GEMINI_API_KEY: ci-stub
+          LLM_API_KEY: ci-stub
+        run: |
+          set -e
+          python -c "import sys; sys.path.insert(0, '.'); import generate_cover, distribution_pipeline, feishu_service, xiaoyuzhou_service, youtube_service; print('imports OK')"
+
       - name: Run pytest
         env:
           # Tests are isolated from .env; provide stub values so any module
@@ -43,7 +52,11 @@ jobs:
           GEMINI_API_KEY: ci-stub
           LLM_API_KEY: ci-stub
         run: |
-          pytest tests/distribution_pipeline -q --tb=short
+          set +e  # don't exit on first failing step; want full traceback
+          python -m pytest --version
+          python -m pytest tests/distribution_pipeline --tb=long --showlocals 2>&1 | tail -200
+          exit_status=${PIPESTATUS[0]}
+          exit $exit_status
 
   lint-skill-md:
     name: Validate SKILL.md front matter
