@@ -2,6 +2,7 @@ import os
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from distribution_pipeline.renderers.guizang.content_allocator import norm_text, visible_text_nodes
 from distribution_pipeline.renderers.guizang.template_loader import vendor_path
@@ -88,7 +89,77 @@ def _proxy_placeholder_lines(markup: str) -> list[str]:
     return hits or ["PASS R14 no visible proxy placeholders"]
 
 
-def review_static_guizang_html(target_dir: Path, mode: str = "editorial") -> dict:
+def _attr(section: str, name: str) -> str:
+    match = re.search(rf'\b{name}=["\']([^"\']*)["\']', section, flags=re.I)
+    return match.group(1).strip() if match else ""
+
+
+def _payload_density_lines(markup: str) -> list[str]:
+    lines = []
+    for section_id, section in _poster_sections(markup):
+        if "role-insight" not in section and 'data-role="insight"' not in section:
+            continue
+        nodes = [node for node in visible_text_nodes(section) if norm_text(node) not in {norm_text(label) for label in SCAFFOLD_LABELS}]
+        payload = norm_text("".join(nodes))
+        semantic_blocks = len([node for node in nodes if len(norm_text(node)) >= 8])
+        if len(payload) < 120 or semantic_blocks < 3:
+            lines.append(f"FAIL R15 insufficient visible payload in {section_id}: chars={len(payload)} blocks={semantic_blocks}")
+    return lines or ["PASS R15 insight cards carry enough visible payload"]
+
+
+def _workflow_contract_lines(markup: str, strict: bool = False) -> list[str]:
+    lines = []
+    for section_id, section in _poster_sections(markup):
+        role = _attr(section, "data-role")
+        recipe = _attr(section, "data-recipe")
+        qa_flags = [flag for flag in _attr(section, "data-qa-flags").split() if flag]
+        density_ok = _attr(section, "data-density-ok").lower()
+        payload_raw = _attr(section, "data-payload-chars")
+        detail_raw = _attr(section, "data-detail-count")
+        try:
+            payload_chars = int(payload_raw) if payload_raw else None
+        except ValueError:
+            payload_chars = None
+        try:
+            detail_count = int(detail_raw) if detail_raw else None
+        except ValueError:
+            detail_count = None
+
+        if role == "insight":
+            if density_ok == "false":
+                lines.append(f"FAIL R16 workflow density gate failed in {section_id}: density_ok=false")
+            if payload_chars is not None and payload_chars < 120:
+                lines.append(f"FAIL R16 workflow payload too sparse in {section_id}: chars={payload_chars}")
+            if detail_count is not None and detail_count < 2:
+                lines.append(f"FAIL R16 workflow detail count too low in {section_id}: details={detail_count}")
+        if qa_flags:
+            severity = "FAIL" if strict else "WARN"
+            lines.append(f"{severity} R16 workflow qa flags in {section_id}: {','.join(qa_flags)}")
+        if recipe in {"M16", "S08"} and "subject map:" not in section:
+            lines.append(f"FAIL R16 text-on-image recipe lacks local subject map in {section_id}: recipe={recipe}")
+    return lines or ["PASS R16 workflow copy/planner contract satisfied"]
+
+
+def _output_artifact_lines(target_dir: Path, strict: bool = False) -> list[str]:
+    target_dir = Path(target_dir)
+    output_dir = target_dir / "output"
+    pngs = sorted(output_dir.glob("*.png")) if output_dir.exists() else []
+    thumbnails = sorted((output_dir / "thumbnails").glob("*.png")) if (output_dir / "thumbnails").exists() else []
+    if not strict:
+        return ["PASS R17 strict artifact gate not requested"]
+    lines = []
+    if not pngs:
+        lines.append("FAIL R17 no exported PNG files found")
+    if target_dir.name == "xhs" and len(pngs) < 8:
+        lines.append(f"FAIL R17 insufficient XHS PNG exports: count={len(pngs)}")
+    if not thumbnails:
+        lines.append("FAIL R17 no 360px thumbnail files found")
+    if not lines:
+        lines.append(f"PASS R17 exported PNG and thumbnail artifacts present: png={len(pngs)} thumbnails={len(thumbnails)}")
+    return lines
+
+
+def review_static_guizang_html(target_dir: Path, mode: str = "editorial", strict: bool = False) -> dict:
     html_path = Path(target_dir) / "index.html"
     if not html_path.exists():
         return {
@@ -128,9 +199,12 @@ def review_static_guizang_html(target_dir: Path, mode: str = "editorial") -> dic
 
     lines.extend(_copy_duplicate_lines(markup))
     lines.extend(_scaffold_label_lines(markup))
+    lines.extend(_payload_density_lines(markup))
+    lines.extend(_workflow_contract_lines(markup, strict=strict))
+    lines.extend(_output_artifact_lines(target_dir, strict=strict))
 
     if mode == "swiss" and 'data-metric-source="proxy"' in markup:
-        lines.append("PASS R13 Swiss proxy metric scales are explicitly labelled")
+        lines.append("FAIL R13 Swiss proxy metric scales are not publishable in strict mode" if strict else "PASS R13 Swiss proxy metric scales are explicitly labelled")
     if mode == "swiss":
         lines.extend(_proxy_placeholder_lines(markup))
 
@@ -158,7 +232,7 @@ def parse_validator_output(output: str) -> dict:
     }
 
 
-def _merge_validator_status(browser_status: dict, static_status: dict) -> dict:
+def _merge_validator_status(browser_status: dict, static_status: dict, strict: bool = False, browser_required: bool = False) -> dict:
     merged = dict(browser_status)
     merged["pass_count"] = browser_status.get("pass_count", 0) + static_status.get("pass_count", 0)
     merged["warn_count"] = browser_status.get("warn_count", 0) + static_status.get("warn_count", 0)
@@ -171,6 +245,7 @@ def _merge_validator_status(browser_status: dict, static_status: dict) -> dict:
     else:
         merged["status"] = "pass"
     merged["static_review"] = static_status
+    merged["quality_gate"] = quality_gate_from_review(merged, strict=strict, browser_required=browser_required)
     return merged
 
 
@@ -207,20 +282,41 @@ def _node_env() -> dict[str, str]:
     return env
 
 
-def run_guizang_validator(target_dir: Path, mode: str = "editorial") -> dict:
+def quality_gate_from_review(review: dict[str, Any], strict: bool = False, browser_required: bool = False) -> dict:
+    reasons = []
+    status = review.get("status", "unknown")
+    if status == "skipped" and browser_required:
+        reasons.append({"code": "R18", "severity": "fail", "layer": "validator_env", "message": review.get("reason") or "browser validator skipped"})
+    if review.get("fail_count", 0) > 0:
+        reasons.append({"code": "R0", "severity": "fail", "layer": "validator", "message": f"validator reported {review.get('fail_count')} failures"})
+    if strict and review.get("warn_count", 0) > 0:
+        reasons.append({"code": "R0", "severity": "fail", "layer": "validator", "message": f"strict mode blocks {review.get('warn_count')} warnings"})
+    publishable = not reasons and status == "pass"
+    return {
+        "strict": bool(strict),
+        "browser_required": bool(browser_required),
+        "publishable": publishable,
+        "status": "pass" if publishable else "fail",
+        "blocking_reasons": reasons,
+    }
+
+
+def run_guizang_validator(target_dir: Path, mode: str = "editorial", strict: bool = False, browser_required: bool = False) -> dict:
     script = vendor_path("validate-social-deck.mjs")
     args = ["node", str(script), str(Path(target_dir)), f"--style={mode}"]
-    static_status = review_static_guizang_html(target_dir, mode=mode)
+    static_status = review_static_guizang_html(target_dir, mode=mode, strict=strict)
     try:
         result = subprocess.run(args, check=False, capture_output=True, text=True, env=_node_env())
     except FileNotFoundError:
-        return {"status": "skipped", "reason": DEPENDENCY_REASON, "static_review": static_status}
+        skipped = {"status": "skipped", "reason": DEPENDENCY_REASON, "static_review": static_status}
+        skipped["quality_gate"] = quality_gate_from_review(skipped, strict=strict, browser_required=browser_required)
+        return skipped
 
     stdout = result.stdout or ""
     stderr = result.stderr or ""
     combined = "\n".join(part for part in [stdout, stderr] if part)
     if _is_missing_playwright(combined):
-        return {
+        skipped = {
             "status": "skipped",
             "reason": DEPENDENCY_REASON,
             "static_review": static_status,
@@ -228,8 +324,10 @@ def run_guizang_validator(target_dir: Path, mode: str = "editorial") -> dict:
             "stderr": stderr,
             "returncode": result.returncode,
         }
+        skipped["quality_gate"] = quality_gate_from_review(skipped, strict=strict, browser_required=browser_required)
+        return skipped
     if _is_browser_process_blocked(combined):
-        return {
+        skipped = {
             "status": "skipped",
             "reason": SANDBOX_REASON,
             "static_review": static_status,
@@ -237,6 +335,8 @@ def run_guizang_validator(target_dir: Path, mode: str = "editorial") -> dict:
             "stderr": stderr,
             "returncode": result.returncode,
         }
+        skipped["quality_gate"] = quality_gate_from_review(skipped, strict=strict, browser_required=browser_required)
+        return skipped
 
     status = parse_validator_output(combined)
     if result.returncode != 0 and status["fail_count"] == 0:
@@ -250,4 +350,4 @@ def run_guizang_validator(target_dir: Path, mode: str = "editorial") -> dict:
             "returncode": result.returncode,
         }
     )
-    return _merge_validator_status(status, static_status)
+    return _merge_validator_status(status, static_status, strict=strict, browser_required=browser_required)

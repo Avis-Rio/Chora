@@ -128,6 +128,29 @@ def _candidate_score(text: str, pos: int, target: int, min_tail: int) -> int:
             score -= 12
     if re.search(r"[A-Za-z0-9]$", head) and re.match(r"^[A-Za-z0-9]", tail):
         score += 200
+    # Penalize cutting inside 2-character CJK compounds (e.g. 形塑 / 知识 / 自由).
+    # If the split boundary leaves a single CJK char on each side AND the joined
+    # 2-char sequence forms a common word in PROTECTED_PHRASES or any 2-CJK
+    # segment, the candidate is much worse. This protects phrases like
+    # "形塑了" -> avoid cut between 形 and 塑.
+    if (
+        re.fullmatch(r"[一-鿿]", head[-1:] if head else "")
+        and re.fullmatch(r"[一-鿿]", tail[:1] if tail else "")
+    ):
+        compound = head[-1] + tail[:1]
+        score += 220
+        if compound in PROTECTED_PHRASES or compound in PREFERRED_SUFFIXES:
+            score += 240
+    # Also penalize when head ends mid-CJK and tail continues a 2-3 char word
+    # (avoid cutting first char of any common word in PROTECTED_PHRASES).
+    for phrase in PROTECTED_PHRASES:
+        idx = text.find(phrase)
+        while idx >= 0:
+            end = idx + len(phrase)
+            # If cut position falls strictly inside a protected phrase, penalize.
+            if idx < pos < end:
+                score += 180
+            idx = text.find(phrase, idx + 1)
     return score
 
 
@@ -140,7 +163,51 @@ def _best_cut(text: str, target: int, min_tail: int) -> int:
         lower = min_tail
         upper = max(min_tail, len(text) - min_tail)
     candidates = range(lower, upper + 1)
-    return min(candidates, key=lambda pos: _candidate_score(text, pos, target, min_tail))
+    # Hard filter: never cut at a position that splits a tight 2-3 char CJK
+    # content word (e.g. 形塑 / 审美 / 自由 / 知识). We check the 2 chars
+    # straddling the cut: b=text[pos-1] (head tail) and c=text[pos] (tail
+    # head). If "bc" forms a content pair (both CJK, neither is a stopword),
+    # cutting here would tear a word in half — skip the position.
+    filtered = [
+        pos
+        for pos in candidates
+        if not _splits_content_pair(text, pos)
+    ]
+    pool = filtered or list(candidates)
+    return min(pool, key=lambda pos: _candidate_score(text, pos, target, min_tail))
+
+
+def _is_cjk(char: str) -> bool:
+    return bool(char) and "一" <= char <= "鿿"
+
+
+# CJK characters that frequently start a stopword / particle and should not be
+# treated as content word heads. When the tail side starts with one, the cut
+# is fine (we are finishing a phrase, not starting one).
+_STOP_FIRST_CHARS = set("的了是也在和与及或而被给对从到把使让为有着过一该些么吗呢啊呀哦哈嘛啦吧嗯呢么")
+
+# CJK characters that frequently end a phrase — when the head side ends with
+# one, the cut is fine (we are closing a phrase, not splitting a word).
+_STOP_LAST_CHARS = set("的了吗呢吧呀啊哈哦嘛啦嗯")
+
+
+def _splits_content_pair(text: str, pos: int) -> bool:
+    """Return True when cutting at pos would split a 2-char CJK content word
+    straddling the cut boundary. The cut separates b=text[pos-1] (head tail)
+    and c=text[pos] (tail head). If "bc" is a content pair, return True.
+    """
+    if pos < 1 or pos >= len(text):
+        return False
+    b = text[pos - 1]
+    c = text[pos]
+    if not (_is_cjk(b) and _is_cjk(c)):
+        return False
+    if b in _STOP_LAST_CHARS or c in _STOP_FIRST_CHARS:
+        return False
+    # Common 2-CJK stop pairs that look content-like but aren't.
+    if (b, c) in {("的", "确"), ("是", "否"), ("的", "话"), ("的", "确"), ("了", "吗")}:
+        return False
+    return True
 
 
 def _split_long_chunk(text: str, target: int, min_tail: int) -> list[str]:

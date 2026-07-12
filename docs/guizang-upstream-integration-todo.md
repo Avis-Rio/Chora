@@ -1,6 +1,6 @@
 # Guizang 上游接入 TODO
 
-本文只记录 Chora 对 `guizang-social-card-skill` 上游规范的接入进度、问题点和后续动作。暂不处理 `process_video.py`、`process_podcast.py`、`process_feed.py`、订阅扫描或内容采集流程。
+本文只记录 Chora 对 `guizang-social-card-skill` 上游规范的接入进度、问题点和后续动作。暂不处理 `process_video.py`、`process_podcast.py`、订阅扫描或内容采集流程。
 
 ## 当前接入链路
 
@@ -25,7 +25,7 @@
 | Vendor 同步 | 已完成 | `vendor/guizang` 已纳入上游 v0.14：`SKILL.md`、`README`、`PRODUCT`、`HANDOFF`、15 个 `references`、9 张 screenshot WebP、模板与 validator。 |
 | 模板读取 | 已完成 | Chora 运行时通过 `template_loader.py` 读取 vendored template，不依赖本机 `~/.codex/skills/...`。 |
 | XHS 基础输出 | 已完成 | 可生成 `xhs/index.html`、`xhs/post.md`、`xhs/render.cjs`。无 PNG 模式已实测可走通。 |
-| WeChat cover pair | 部分完成 | 仅 Editorial 模式支持 21:9、1:1、pair preview；Swiss 会抛 `NotImplementedError`。 |
+| WeChat cover pair | 已完成 | Editorial + Swiss 双模式均支持 21:9、1:1、pair preview；具体由 `guizang_renderer.py::render_guizang_wechat_package` 的 `mode == "swiss"` 分支选择 `_render_wechat_swiss_wide` / `_render_wechat_swiss_square`。回归测试见 `tests/distribution_pipeline/test_guizang_wechat_renderer.py::test_render_guizang_wechat_package_swiss_mode`。 |
 | Layout recipes | 基本完成 | Editorial M01-M16、Swiss S01-S12 均已有 renderer；planner 已有保守路由。 |
 | Theme presets | 基本完成 | Editorial 6 套、Swiss 4 套可解析。 |
 | Category cookbook | 部分完成 | 11 类小红书 category 与 4 类 out-of-scope pushback 已进入 `category_router.py`，但还未完整变成用户侧提示或 manifest review。 |
@@ -75,7 +75,7 @@
    - 已改善：Token 夹具 R5 密度 warning 从 5 个降到 2 个；再硬性增高会导致 xhs-06 溢出，剩余 xhs-06/xhs-07 归后续配方选择优化。
 
 6. WeChat 上游覆盖不足
-   - WeChat 仅 Editorial 支持；Swiss mode 直接 `NotImplementedError`。
+   - ~~WeChat 仅 Editorial 支持；Swiss mode 直接 `NotImplementedError`。~~ 2026-07-11 已修复：`_render_wechat_swiss_wide` / `_render_wechat_swiss_square` 已实现并由 `mode == "swiss"` 分支接入；增加 swiss 模式回归测试。
    - `title-shortener.md` 只部分转成规则，仍未形成通用短标题模块。
 
 7. Map component 未接

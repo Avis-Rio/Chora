@@ -7,6 +7,7 @@ from distribution_pipeline.renderers.guizang.exporter import export_guizang_imag
 from distribution_pipeline.renderers.guizang.guizang_renderer import render_guizang_wechat_package
 from distribution_pipeline.renderers.guizang.guizang_renderer import render_guizang_xhs_package
 from distribution_pipeline.renderers.guizang.guizang_renderer import resolve_guizang_mode
+from distribution_pipeline.renderers.guizang.validator import quality_gate_from_review
 from distribution_pipeline.renderers.guizang.validator import run_guizang_validator
 from distribution_pipeline.renderers.html_to_image import export_html_to_images
 from distribution_pipeline.renderers.manifest import build_manifest, write_manifest
@@ -34,6 +35,9 @@ def run(
     guizang_mode: str = "auto",
     guizang_theme: str = "auto",
     image_asset_mode: str = "plan",
+    strict_quality_gate: bool = False,
+    require_browser_validator: bool = False,
+    fail_on_quality_gate: bool = False,
 ) -> Path:
     content_dir = Path(content_dir)
     output_root = Path(output_root)
@@ -70,9 +74,19 @@ def run(
             export_guizang_images(package_dir)
             guizang_review = {}
             if platform in ("all", "xhs"):
-                guizang_review["xhs"] = run_guizang_validator(package_dir / "xhs", mode=xhs_guizang_mode)
+                guizang_review["xhs"] = run_guizang_validator(
+                    package_dir / "xhs",
+                    mode=xhs_guizang_mode,
+                    strict=strict_quality_gate,
+                    browser_required=require_browser_validator,
+                )
             if platform in ("all", "wechat"):
-                guizang_review["wechat"] = run_guizang_validator(package_dir / "wechat", mode=wechat_guizang_mode)
+                guizang_review["wechat"] = run_guizang_validator(
+                    package_dir / "wechat",
+                    mode=wechat_guizang_mode,
+                    strict=strict_quality_gate,
+                    browser_required=require_browser_validator,
+                )
         else:
             skipped_review = {
                 "status": "skipped",
@@ -80,13 +94,34 @@ def run(
             }
             guizang_review = {}
             if platform in ("all", "xhs"):
-                guizang_review["xhs"] = skipped_review
+                xhs_skipped = dict(skipped_review)
+                xhs_skipped["quality_gate"] = quality_gate_from_review(
+                    xhs_skipped,
+                    strict=strict_quality_gate,
+                    browser_required=require_browser_validator,
+                )
+                guizang_review["xhs"] = xhs_skipped
             if platform in ("all", "wechat"):
-                guizang_review["wechat"] = skipped_review
+                wechat_skipped = dict(skipped_review)
+                wechat_skipped["quality_gate"] = quality_gate_from_review(
+                    wechat_skipped,
+                    strict=strict_quality_gate,
+                    browser_required=require_browser_validator,
+                )
+                guizang_review["wechat"] = wechat_skipped
         review_status = {
             "repetition": review_repetition(package.get("visual_briefs", [])),
             "guizang": guizang_review,
         }
+        if fail_on_quality_gate:
+            blocked = [
+                name
+                for name, review in guizang_review.items()
+                if not (review.get("quality_gate") or {}).get("publishable", False)
+            ]
+            if blocked:
+                details = {name: (guizang_review[name].get("quality_gate") or {}).get("blocking_reasons", []) for name in blocked}
+                raise RuntimeError(f"Guizang quality gate failed for {', '.join(blocked)}: {details}")
         manifest = build_manifest(
             package_dir,
             source_content_dir=str(content_dir),
@@ -140,6 +175,9 @@ def main():
         choices=["plan", "candidates", "download"],
         help="Guizang 图像资产处理模式：plan 仅写搜索计划，candidates 仅拉候选，download 下载首选候选。",
     )
+    parser.add_argument("--strict-quality-gate", action="store_true", help="把 Guizang 静态 QA warning 升级为不可发布阻断。")
+    parser.add_argument("--require-browser-validator", action="store_true", help="要求 Playwright 浏览器 QA 必须成功运行，不能跳过。")
+    parser.add_argument("--fail-on-quality-gate", action="store_true", help="质量门不通过时令 CLI 以错误退出。")
     args = parser.parse_args()
 
     package_dir = run(
@@ -153,6 +191,9 @@ def main():
         guizang_mode=args.guizang_mode,
         guizang_theme=args.guizang_theme,
         image_asset_mode=args.image_assets,
+        strict_quality_gate=args.strict_quality_gate,
+        require_browser_validator=args.require_browser_validator,
+        fail_on_quality_gate=args.fail_on_quality_gate,
     )
     print(f"Distribution package generated: {package_dir}")
 

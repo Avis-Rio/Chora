@@ -74,11 +74,22 @@ def _cover_hook(source: dict, insights: list[dict]) -> tuple[str, list[str], str
 
 
 def _takeaway(insight: dict) -> str:
-    body_sentences = _split_sentences(insight.get("body", ""), limit=2)
-    if body_sentences:
-        return body_sentences[0]
+    """Generate a layout-specific callout, not a copy of body text.
+
+    Guizang sample cards treat the quote/callout block as a second voice:
+    it reframes the argument for visual rhythm. Reusing the lead sentence
+    makes the card look like a duplicated text dump.
+    """
     title = _strip_end_punctuation(insight.get("title", ""))
-    return f"真正要记住的是：{title}。" if title else ""
+    if not title:
+        return ""
+    if len(title) <= 18:
+        return f"不是补充材料，而是这张卡最需要带走的判断：{title}。"
+    if "不是" in title or "无法" in title or "远胜" in title:
+        return f"换个角度看，真正的分界线在这里：{title}。"
+    if "价值" in title or "根基" in title or "支柱" in title:
+        return f"它的重点不在表层功能，而在背后的长期价值：{title}。"
+    return f"把这句话放大看，它指向的是一个更深的判断：{title}。"
 
 
 def _select_growth_insights(insights: list[dict], slots: int) -> list[dict]:
@@ -129,12 +140,30 @@ def _closing_items(insights: list[dict], selected: list[dict]) -> list[dict]:
     return items
 
 
+def _norm_copy_text(value: str) -> str:
+    return "".join(char for char in str(value or "") if char.strip())
+
+
+def _copy_matches_insight(copy: dict, insight: dict) -> bool:
+    """Reject stale generated card_copy after callers replace package['insights']."""
+    source_title = _norm_copy_text(copy.get("source_title", ""))
+    source_body = _norm_copy_text(copy.get("source_body", ""))
+    insight_title = _norm_copy_text(insight.get("title", ""))
+    insight_body = _norm_copy_text(insight.get("body", ""))
+    if source_title and insight_title and source_title != insight_title:
+        return False
+    if source_body and insight_body and source_body != insight_body:
+        return False
+    return True
+
+
 def build_xhs_card_plan(
     source: dict,
     insights: list[dict],
     max_cards: int | None = None,
     epilogue: dict | None = None,
     strategy: str = "archive",
+    card_copies: list[dict] | None = None,
 ) -> list[dict]:
     if max_cards is None:
         max_cards = _growth_card_count(insights, epilogue) if strategy == "growth-depth" else _auto_card_count(insights, epilogue)
@@ -168,15 +197,38 @@ def build_xhs_card_plan(
         else insights[:slots_for_insights]
     )
 
-    for insight in selected_insights:
+    copies = card_copies or []
+    copy_by_index = {str(item.get("insight_index")): item for item in copies if item.get("insight_index") is not None}
+    allow_positional_copy = bool(copies) and not copy_by_index
+    for insight_offset, insight in enumerate(selected_insights):
+        copy = copy_by_index.get(str(insight.get("index")))
+        if copy and not _copy_matches_insight(copy, insight):
+            copy = {}
+        if not copy and allow_positional_copy and insight_offset < len(copies):
+            candidate = copies[insight_offset]
+            copy = candidate if _copy_matches_insight(candidate, insight) else {}
+        if not copy:
+            copy = {}
         cards.append(
             {
                 "type": "single-insight",
-                "title": insight.get("title", ""),
-                "body": insight.get("body", ""),
+                "title": copy.get("headline") or insight.get("title", ""),
+                "title_lines": copy.get("headline_lines"),
+                "subhead": copy.get("subhead", ""),
+                "body": copy.get("body") or insight.get("body", ""),
+                "points": copy.get("points") or [],
+                "details": copy.get("details") or [],
+                "source_title": copy.get("source_title") or insight.get("title", ""),
+                "source_body": copy.get("source_body") or insight.get("body", ""),
+                "pullquote": copy.get("pullquote", ""),
+                "copy_density": copy.get("copy_density", ""),
+                "min_payload_ok": copy.get("min_payload_ok", False),
+                "payload_chars": copy.get("payload_chars", 0),
+                "layout_intent": copy.get("layout_intent", ""),
+                "recipe_hint": copy.get("recipe_hint", ""),
                 "index": len(cards) + 1,
                 "insight_index": insight.get("index"),
-                "reader_takeaway": _takeaway(insight),
+                "reader_takeaway": copy.get("pullquote") or _takeaway(insight),
                 "strategy": strategy,
             }
         )

@@ -1,11 +1,14 @@
 ---
 name: process-url
 description: 处理单个 YouTube 视频或小宇宙播客 URL，自动执行完整工作流
+license: MIT
 ---
 
 # /process-url 工作流
 
-处理单个内容 URL，自动识别类型并执行完整工作流。
+> **本 SKILL 是入口，不重复工作流细节**。完整工作流（步骤 0-7、元数据获取、AI 改写、Quiet Mode 协议）定义在 [`content-feed-summarizer/SKILL.md`](../content-feed-summarizer/SKILL.md)，本文件**只声明此入口特有的规则**。
+>
+> 编排权威：`skills/ARCHITECTURE.md`
 
 ## 使用方式
 
@@ -23,84 +26,66 @@ description: 处理单个 YouTube 视频或小宇宙播客 URL，自动执行完
 
 ## 执行步骤
 
-### 步骤 1: 识别 URL 类型
+### 步骤 1：识别 URL 类型
 
-自动检测 URL 是 YouTube 还是小宇宙播客。
+根据 host 自动判断：`youtube.com` / `youtu.be` → YouTube；`xiaoyuzhoufm.com` → 小宇宙。
 
-### 步骤 2: 执行对应处理脚本
+### 步骤 2：调用对应处理脚本
 
-**如果是 YouTube 视频:**
-```bash
-python3 process_video.py "<URL>"
-```
+| 平台 | 命令 |
+|------|------|
+| YouTube | `python3 process_video.py "<URL>"` |
+| 小宇宙 | `python3 process_podcast.py "<URL>"` |
 
-**如果是小宇宙播客:**
-```bash
-python3 process_podcast.py "<URL>"
-```
+脚本内部完成完整工作流（元数据 / 封面 / 转录 / AI 改写 / 归档）。
 
-### 步骤 3: 处理流程 (自动执行，无需确认)
+### 步骤 3：完整性验证（**此入口特有**）
 
-| 阶段 | YouTube | 小宇宙 |
-|------|---------|--------|
-| 元数据 | yt-dlp 获取标题、频道、日期 | RSS 解析 |
-| 封面 | 下载高清缩略图 | Gemini 生成艺术封面 |
-| 内容 | youtube-transcript-api 获取字幕 | Groq Whisper 转录音频 |
-| AI 改写 | Claude Sonnet 4 流式生成 | Claude Sonnet 4 流式生成 |
+必须验证 `rewritten.md` 成功生成：
 
-### 步骤 4: 完整性验证 ⚠️
+| 条件 | 失败处理 |
+|------|----------|
+| 文件存在 | 重试（最多 5 次，间隔 5 秒） |
+| 文件 > 100 字节 | 同上 |
+| 仍然失败 | 记录到 `processing_errors.log`，继续（不抛错） |
 
-**重要**: AI 改写完成后，**必须验证** `rewritten.md` 是否成功生成：
-- 检查文件是否存在
-- 检查文件大小 > 100 字节
-- 如验证失败，立即重试（最多 5 次）
+### 步骤 4：同步至飞书
 
-### 步骤 5: 同步至飞书
-
-处理完成后，同步至飞书多维表格：
 ```bash
 python3 feishu_service.py sync
 ```
 
-## 输出文件
+> 若环境变量 `FEISHU_*` 未配置，该命令会安全跳过（不报错）。
 
-处理完成后，在 `content_archive/{日期}/{平台}_{频道}_{标题}/` 目录下生成：
+## 此入口的 Quiet Mode 规则
 
-```
-├── metadata.md      # 元数据 (来源、发布时间、嘉宾、金句)
-├── transcript.md    # 原始转录/字幕
-├── rewritten.md     # 深度改写内容 (2000-3000字)
-├── cover.jpg/png    # 封面图
-└── audio.m4a       # (仅小宇宙) 原始音频
-```
+- **URL 模式无需确认**——给定 URL 即开始
+- 数据缺失用 `"Unknown"` 兜底，不停下询问
+- 错误重试 3 次后写入 `processing_errors.log`，继续
+- 一旦开始处理，绝不暂停请求"是否继续？"
 
-## AI 改写输出结构
+## 输出
 
-`rewritten.md` 包含以下部分：
+每条内容落在：
 
 ```
-## 1. 创作说明
-- 选题方向、评分、字数、核心价值
-
-## 2. 深度改写 (2000-2500字)
-核心论点深度展开
-
-## 3. 核心洞察
-5-10 条穿透力洞察
-
-## 4. 哲思结语
-思想家风格的金句总结
-
-## 5. 推荐书单
-3-5 本延伸阅读书籍
-
-## 6. 内容标签
-Tags: Philosophy, Technology, ...
+content_archive/{YYYY-MM-DD}/{youtube|xiaoyuzhou}_{channel}_{title}/
+├── metadata.md
+├── transcript.md
+├── rewritten.md    ← 必须验证存在且 > 100 字节
+├── cover.jpg/png
+└── audio.m4a       ← 仅小宇宙
 ```
 
-## 注意事项
+详细字段约定见 `content-feed-summarizer/SKILL.md` §3（AI 改写输出结构）。
 
-- URL 模式**无需确认**，直接开始处理
-- 如果目录已存在，会跳过已完成的步骤
-- 处理过程中遇到错误会记录并继续
-- 封面生成失败会自动调用 Gemini 兜底
+## 与 process-subscriptions 的区别
+
+| 场景 | 用 process-url | 用 process-subscriptions |
+|------|----------------|--------------------------|
+| 用户给了单个 URL | ✅ | ❌ |
+| 批量扫描订阅源 | ❌ | ✅ |
+| 需要用户先确认 | 否 | **是** |
+| 自动完整性修复 | 内嵌重试 5 次 | `utils/content_validator.py --fix` |
+
+详细对比见 `skills/ARCHITECTURE.md` §4。

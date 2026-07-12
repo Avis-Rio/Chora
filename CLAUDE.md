@@ -80,7 +80,7 @@ python download_xyz.py <episode_url>
   - 从 `config/sources.yaml` 读取 API 配置（优先从 `.env` 环境变量读取）。
   - 模型：`gemini-3.1-flash-image-preview`（可在 `.env` 中覆盖）。
 - **`fetch_feed.py`**：订阅源扫描与获取。
-- **`process_feed.py`**：批量处理入口。
+- ~~**`process_feed.py`**~~：批量处理入口。**2026-07-11 起废弃** ——与 `process-subscriptions` Skill 功能完全重叠，且 `--update-state` 子命令从未实现、文件本身依赖 Python 3.10+ 语法。状态更新已下沉到 `process_video.py` / `process_podcast.py` 内部。详见 `skills/ARCHITECTURE.md` §6。
 - **`feishu_service.py`**：飞书多维表格同步服务。
 - **`rewrite_service.py`**：AI 内容改写服务。
 - **`config_loader.py`**：统一配置加载器，支持 `.env` 环境变量覆盖 YAML 配置。

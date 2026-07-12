@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 from distribution_pipeline.assets.image_assets import build_image_asset_plan
+from distribution_pipeline.directors.card_copy import build_card_copies
 from distribution_pipeline.directors.visual_brief import build_visual_briefs
 from distribution_pipeline.directors.visual_system import build_visual_system
 from distribution_pipeline.extractors.insight_parser import (
@@ -59,6 +60,7 @@ def build_content_package(content_dir: Path, output_dir: Path | None = None) -> 
     philosophical_epilogue = parse_philosophical_epilogue(rewritten_path)
     visual_system = build_visual_system(source, insights)
     visual_briefs = build_visual_briefs(insights, visual_system)
+    card_copy = build_card_copies(source, insights, philosophical_epilogue, visual_briefs)
     image_assets = build_image_asset_plan(source, insights, visual_briefs, visual_system, content_dir)
 
     _write_json(output_dir / "source.json", source)
@@ -66,6 +68,7 @@ def build_content_package(content_dir: Path, output_dir: Path | None = None) -> 
     _write_json(output_dir / "philosophical_epilogue.json", philosophical_epilogue)
     _write_json(output_dir / "visual_system.json", visual_system)
     _write_json(output_dir / "visual_briefs.json", visual_briefs)
+    _write_json(output_dir / "card_copy.json", card_copy)
     _write_json(output_dir / "image_assets.json", image_assets)
 
     return {
@@ -74,6 +77,7 @@ def build_content_package(content_dir: Path, output_dir: Path | None = None) -> 
         "philosophical_epilogue": philosophical_epilogue,
         "visual_system": visual_system,
         "visual_briefs": visual_briefs,
+        "card_copy": card_copy,
         "image_assets": image_assets,
         "output_dir": str(output_dir),
     }

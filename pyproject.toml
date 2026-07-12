@@ -1,0 +1,32 @@
+[project]
+name = "chora"
+version = "0.1.0"
+description = "Chora — automated content aggregation + AI rewrite pipeline for YouTube / 小宇宙"
+requires-python = ">=3.10"
+readme = "README.md"
+
+[tool.pytest.ini_options]
+# Project-wide pytest configuration. Previously each test ran only via
+# `pytest tests/distribution_pipeline -q`; consolidating here lets CI and
+# local development share the same options.
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--tb=short",
+]
+filterwarnings = [
+    # urllib3 in Python 3.9 complains about OpenSSL; not relevant on 3.10+.
+    "ignore::DeprecationWarning",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests that require network or external services",
+]
+
+[tool.setuptools]
+# This project is consumed via Skills, not installed via pip. We only
+# declare package config for tooling (pytest discovery).
+packages = []

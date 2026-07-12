@@ -15,6 +15,10 @@ def _numbered_section(content: str, number: int, title_pattern: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def _deep_rewrite_section(content: str) -> str:
+    return _numbered_section(content, 2, r"深度改写|Deep Rewrite")
+
+
 def _core_insights_section(content: str) -> str:
     return _numbered_section(content, 3, r"核心洞察")
 
@@ -43,25 +47,152 @@ def _split_title_body(text: str) -> tuple[str, str]:
     return text.strip(), ""
 
 
+def _split_paragraphs(text: str) -> list[str]:
+    """Split deep-rewrite text into clean paragraph strings.
+
+    Treats both blank lines and inline '### ' / '## ' headings as separators.
+    """
+    if not text:
+        return []
+    paragraphs: list[str] = []
+    current: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if current:
+                paragraphs.append(" ".join(current).strip())
+                current = []
+            continue
+        if line.startswith("#") or line.startswith("**") and line.rstrip("*").endswith("**"):
+            if current:
+                paragraphs.append(" ".join(current).strip())
+                current = []
+            continue
+        current.append(line)
+    if current:
+        paragraphs.append(" ".join(current).strip())
+    return [p for p in paragraphs if p]
+
+
+_CJK_RE = re.compile(r"[一-鿿]")
+_STOP_TOKENS = {"的", "是", "在", "了", "和", "与", "或", "而", "为", "有"}
+
+
+def _extract_keywords(title: str, max_keywords: int = 4) -> list[str]:
+    """Extract distinctive CJK tokens from an insight title for paragraph matching."""
+    seen: list[str] = []
+    for char in title:
+        if not _CJK_RE.match(char):
+            continue
+        if char in _STOP_TOKENS:
+            continue
+        if char in seen:
+            continue
+        seen.append(char)
+        if len(seen) >= max_keywords:
+            break
+    return seen
+
+
+def _score_paragraph(paragraph: str, keywords: list[str]) -> int:
+    """Score a paragraph by keyword overlap with insight title."""
+    if not keywords:
+        return 0
+    score = 0
+    for kw in keywords:
+        score += paragraph.count(kw)
+    # Reward longer paragraphs a little so we don't always pick 1-sentence ones.
+    score += min(len(paragraph) // 80, 3)
+    return score
+
+
+def _best_paragraph(paragraphs: list[str], keywords: list[str], used: set[int]) -> str:
+    """Pick the first unused paragraph that shares keywords with the insight.
+
+    Earlier paragraphs tend to introduce the topic of the first insight; later
+    paragraphs typically expand on later insights. Picking the first matching
+    paragraph preserves the rewritten narrative flow and avoids mismatches
+    where a high-scoring later paragraph overrides an earlier, more relevant
+    one for a different insight.
+    """
+    matches: list[tuple[int, int]] = []
+    for i, paragraph in enumerate(paragraphs):
+        if i in used:
+            continue
+        score = _score_paragraph(paragraph, keywords)
+        if score > 0:
+            matches.append((i, score))
+    if not matches:
+        return ""
+    # Among matches, prefer the earliest paragraph with the highest score.
+    matches.sort(key=lambda pair: (pair[0], -pair[1]))
+    best_idx = matches[0][0]
+    used.add(best_idx)
+    return paragraphs[best_idx]
+
+
+def _summarize_paragraph(text: str, max_chars: int = 90) -> str:
+    """Trim a paragraph to a single sentence or N chars as a card body summary."""
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return ""
+    # Prefer the first sentence that ends with terminal punctuation.
+    for end in ("。", "！", "？"):
+        idx = text.find(end)
+        if 0 < idx < max_chars + 30:
+            return text[: idx + 1].strip()
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip("，,、;；") + "…"
+
+
 def parse_insights(path: Path) -> list[dict]:
-    section = _core_insights_section(_read(path))
+    content = _read(path)
+    section = _core_insights_section(content)
+    paragraphs = _split_paragraphs(_deep_rewrite_section(content))
     insights = []
     current = None
+    used_paragraphs: set[int] = set()
+    next_sequential = 0
+
+    def _next_paragraph() -> str:
+        nonlocal next_sequential
+        if not paragraphs:
+            return ""
+        # Round-robin through paragraphs when keyword match fails.
+        for _ in range(len(paragraphs)):
+            idx = next_sequential % len(paragraphs)
+            next_sequential += 1
+            if idx in used_paragraphs:
+                continue
+            used_paragraphs.add(idx)
+            return paragraphs[idx]
+        return ""
 
     def flush_current() -> None:
         nonlocal current
         if not current:
             return
         text = " ".join(current["chunks"]).strip()
-        title, body = _split_title_body(text)
+        title, inline_body = _split_title_body(text)
         if title:
+            keywords = _extract_keywords(title)
+            # Prefer keyword-matched paragraph; fall back to sequential round-robin.
+            paragraph = _best_paragraph(paragraphs, keywords, used_paragraphs)
+            if not paragraph:
+                paragraph = _next_paragraph()
+            body = inline_body.strip()
+            if not body and paragraph:
+                body = _summarize_paragraph(paragraph)
+            elif paragraph and len(body) < 40:
+                body = (body + " " + _summarize_paragraph(paragraph, max_chars=70)).strip()
             insights.append(
                 {
                     "index": current["index"],
                     "title": title,
                     "body": body,
                     "one_liner": body[:80],
-                    "keywords": [],
+                    "keywords": keywords,
                 }
             )
         current = None
@@ -84,6 +215,15 @@ def parse_insights(path: Path) -> list[dict]:
             current["chunks"].append(line)
 
     flush_current()
+
+    # Final fallback: distribute any remaining unused paragraphs sequentially
+    # so every insight gets a body explanation.
+    for insight in insights:
+        if insight["body"]:
+            continue
+        paragraph = _next_paragraph()
+        if paragraph:
+            insight["body"] = _summarize_paragraph(paragraph)
 
     return insights
 

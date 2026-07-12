@@ -8,6 +8,10 @@ __pycache__/
 .venv
 env/
 venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
 
 # Config with secrets
 config/*.yaml
@@ -27,9 +31,13 @@ conversations/
 .DS_Store
 Thumbs.db
 
-# Temporary files
+# Temporary / debug files
 *.tmp
 *.log
+*.m4a
+debug_*.html
+scratch_*.py
+inspect_*.py
 
 # Content archive (generated data)
 content_archive/

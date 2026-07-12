@@ -42,3 +42,47 @@ def test_render_guizang_wechat_package_writes_cover_pair(tmp_path):
     assert "wechat-cover-pair-preview.png" in render_script
     assert "方形封面" in appendix
     assert (wechat_dir / "assets" / "image_assets.json").exists()
+
+
+def test_render_guizang_wechat_package_swiss_mode(tmp_path):
+    """Swiss mode cover pair (WeChat 21:9 + 1:1 + pair preview).
+
+    Regression test for the upstream integration TODO that flagged WeChat
+    Swiss as throwing ``NotImplementedError``. As of 2026-07-11 the
+    implementations of ``_render_wechat_swiss_wide`` and
+    ``_render_wechat_swiss_square`` are wired into
+    ``render_guizang_wechat_package`` via the ``mode == "swiss"`` branch
+    in guizang_renderer.py. This test pins that contract.
+    """
+    content = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
+    package = build_content_package(content, tmp_path / "pkg")
+
+    written = render_guizang_wechat_package(
+        package,
+        tmp_path / "pkg",
+        mode="swiss",
+        theme="auto",
+        image_asset_mode="plan",
+    )
+
+    wechat_dir = tmp_path / "pkg" / "wechat"
+    html_path = wechat_dir / "index.html"
+    render_path = wechat_dir / "render.cjs"
+    html = html_path.read_text(encoding="utf-8")
+    render_script = render_path.read_text(encoding="utf-8")
+
+    assert html_path in written
+    # Swiss variant appends "swiss" to the poster class (see _wechat_section_shell)
+    assert 'class="poster wide swiss"' in html
+    assert 'class="poster square swiss"' in html
+    # Swiss uses 21:9 + 1:1 + cover pair preview sections
+    assert 'id="wechat-21x9"' in html
+    assert 'id="wechat-1x1"' in html
+    assert 'id="wechat-cover-pair-preview"' in html
+    # Swiss style emphasises numbered stat blocks (01 INSIGHT etc.)
+    assert "INSIGHT" in html
+    assert '<div class="stat-block"' in html
+    # PNG output targets should match the editorial pattern
+    assert "wechat-21x9-cover.png" in render_script
+    assert "wechat-1x1-cover.png" in render_script
+    assert "wechat-cover-pair-preview.png" in render_script

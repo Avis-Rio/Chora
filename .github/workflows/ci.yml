@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: pytest (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run pytest
+        env:
+          # Tests are isolated from .env; provide stub values so any module
+          # that reads env doesn't fail during collection.
+          GROQ_API_KEY: ci-stub
+          GEMINI_API_KEY: ci-stub
+          LLM_API_KEY: ci-stub
+        run: |
+          pytest tests/distribution_pipeline -q --tb=short
+
+  lint-skill-md:
+    name: Validate SKILL.md front matter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SKILL.md front matter (name + description required)
+        run: |
+          set -e
+          for f in $(find skills -name 'SKILL.md'); do
+            echo "checking $f"
+            head -1 "$f" | grep -q '^---$' || { echo "  ❌ missing leading ---"; exit 1; }
+            grep -q '^name:' "$f"     || { echo "  ❌ missing name field"; exit 1; }
+            grep -q '^description:' "$f" || { echo "  ❌ missing description field"; exit 1; }
+          done
+          echo "✅ All SKILL.md files have valid YAML front matter"

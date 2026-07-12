@@ -83,12 +83,18 @@ cd /Users/Avis/Vibe_Coding/Chora && python3 process_video.py "<VIDEO_URL>"
 cd /Users/Avis/Vibe_Coding/Chora && python3 process_podcast.py "<EPISODE_URL>"
 ```
 
-### 5. 更新状态
+### 5. 更新状态（无需操作）
 
-处理完成后，将已处理的 ID 写入 `config/state.yaml`:
-// turbo
+`process_video.py` 和 `process_podcast.py` 内部在每次成功处理后会自动将 ID 追加到 `config/state.yaml` 的 `processed_ids` 列表中。
+
+> **历史说明**：早期版本曾通过 `python3 process_feed.py --update-state` 单独更新状态，
+> 但 `process_feed.py` 自 2026-07-11 起已废弃（与 `/process-subscriptions` Skill 功能完全重叠，
+> 且该命令从未实现 —— `--update-state` 参数根本不存在，文件本身还存在 Python 3.10+
+> 语法依赖）。状态更新已下沉到 `process_video.py` / `process_podcast.py` 内部，无需额外步骤。
+
+如果你想确认状态已正确写入，可以查看：
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 process_feed.py --update-state
+cat config/state.yaml
 ```
 
 ### 6. 同步至飞书多维表格

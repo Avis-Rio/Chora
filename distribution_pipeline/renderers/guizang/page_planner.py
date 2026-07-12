@@ -8,6 +8,7 @@ from distribution_pipeline.renderers.guizang.content_allocator import assign_cop
 from distribution_pipeline.renderers.guizang.screenshot_treatment import detect_screenshot
 from distribution_pipeline.renderers.guizang.subject_mapper import build_subject_map
 from distribution_pipeline.renderers.guizang.title_breaker import semantic_title_lines
+from distribution_pipeline.renderers.guizang.title_budget import title_variants
 from distribution_pipeline.renderers.xhs_plan import build_xhs_card_plan
 
 
@@ -63,6 +64,22 @@ def _choose_recipe(candidates: list[str], previous: str | None, offset: int = 0)
 
 def _sparse_recipe(previous: str | None) -> str:
     return "M11" if previous != "M11" else "M09"
+
+
+def _content_payload(card: dict) -> dict:
+    body = str(card.get("body") or "")
+    source_body = str(card.get("source_body") or "")
+    points = card.get("points") or _split_points(body, limit=5)
+    details = card.get("details") or _split_points(source_body or body, limit=5)
+    pullquote = str(card.get("pullquote") or "")
+    chars = len("".join(ch for ch in " ".join([body, source_body, pullquote, *points, *details]) if ch.strip()))
+    return {
+        "chars": chars,
+        "points": len(points),
+        "details": len(details),
+        "has_pullquote": bool(pullquote),
+        "low": chars < 160 or len(points) < 2,
+    }
 
 
 def content_profile(source: dict, insights: list[dict]) -> str:
@@ -375,22 +392,30 @@ def _growth_title(title: str) -> str:
 
 
 def _choose_insight_recipe(card: dict, has_image: bool, previous: str | None, offset: int, profile: str = "default") -> str:
-    if has_image:
-        return "M10"
-
     body = card.get("body", "")
-    points = _split_points(body, limit=5)
+    payload = _content_payload(card)
+    points = card.get("points") or _split_points(body, limit=5)
     title = card.get("title", "")
-    text = f"{title} {body}"
+    text = f"{title} {body} {card.get('source_body', '')}"
 
     if _has_comparison_signal(title) and previous != "M15":
         return "M15"
+
+    if payload["low"]:
+        # 低密度内容：候选大气/留白模板（M09 atmospheric）承载稀疏文案，避免密集模板空荡。
+        if payload["details"] >= 3 or len(points) >= 3:
+            return "M08" if previous != "M08" else "M14"
+        return "M09" if previous != "M09" else "M11"
+
+    if has_image and payload["details"] >= 2:
+        return "M10"
+
     if _has_checklist_signal(text) and len(points) >= 3 and previous != "M05":
         return "M05"
 
     if profile == "creator-growth":
         if "算法" in text and len(title) <= 24:
-            return "M09" if previous != "M09" else "M11"
+            return _sparse_recipe(previous)
         if "系统" in text or "流程" in text or "杠杆" in text:
             return _sparse_recipe(previous) if len(body) <= 180 else ("M14" if previous != "M14" else "M11")
         if len(points) >= 4:
@@ -404,7 +429,7 @@ def _choose_insight_recipe(card: dict, has_image: bool, previous: str | None, of
 
     if _strong_sentence_count(body) <= 1:
         if len(body) <= 42 and len(title) <= 24:
-            return "M09" if previous != "M09" else "M11"
+            return _sparse_recipe(previous)
         if len(body) <= 140:
             return _sparse_recipe(previous)
     if len(points) <= 2 and len(body) <= 150:
@@ -424,7 +449,7 @@ def _choose_editorial_category_recipe(card: dict, has_image: bool, previous: str
         return "M02" if previous != "M02" else "M10"
     if key == "emotion":
         if len(points) <= 2 or len(body) <= 180:
-            return "M09" if previous != "M09" else "M11"
+            return _sparse_recipe(previous)
         return "M11" if previous != "M11" else "M04"
     if key in ("food", "makeup", "fitness") and _has_checklist_signal(f"{card.get('title', '')} {body}"):
         return "M14" if previous != "M14" else "M05"
@@ -447,6 +472,10 @@ def _choose_swiss_insight_recipe(
     lowered = text.lower()
     points = _split_points(body, limit=6)
 
+    if _has_map_signal(text) and previous != "S13":
+        map_nodes = _extract_map_nodes(title, body)
+        if len(map_nodes) >= 2:
+            return "S13"
     if has_image and has_subject_map and previous != "S08":
         return "S08"
     if any(word in lowered for word in ("top", "ranking", "rank")) or any(word in text for word in ("排名", "前十", "最高", "最低")):
@@ -475,11 +504,6 @@ def _choose_swiss_insight_recipe(
         and previous != "S03"
     ):
         return "S03"
-    # map 信号在 metric 之后，避免中美/50倍这类以数据为主的 insight 被误派
-    if _has_map_signal(text) and previous != "S13":
-        map_nodes = _extract_map_nodes(title, body)
-        if len(map_nodes) >= 2:
-            return "S13"
     sequence = _sequence_recipe(category or {}, "swiss", "insight", offset, previous, has_image, has_subject_map, text)
     if sequence:
         return sequence
@@ -521,13 +545,17 @@ def _short_cover_lines(title: str) -> list[str]:
     if current.strip():
         clauses.append(current.strip())
     clauses = [_compress_cover_clause(clause) for clause in clauses]
-    useful = [clause for clause in clauses if len(clause) <= 12]
+    # Prefer natural punctuation clauses (≤18 chars) — they read more like
+    # editorial pull-quotes and stay within two visual lines at 62px / 1080px.
+    useful = [clause for clause in clauses if len(clause) <= 18]
     if len(useful) >= 2:
         return useful[:2]
+    if useful:
+        return useful[:1]
     if clauses:
         first = clauses[0]
-        return semantic_title_lines(first, target=11, max_lines=2, min_tail=3)
-    return semantic_title_lines(clean, target=11, max_lines=2, min_tail=3)
+        return semantic_title_lines(first, target=12, max_lines=2, min_tail=3)
+    return semantic_title_lines(clean, target=12, max_lines=2, min_tail=3)
 
 
 
@@ -538,6 +566,12 @@ def _cap_title_chars(text: str, limit: int) -> str:
     if not clean or len(clean) <= limit:
         return clean
     return clean[:limit].rstrip("，,。.!！?？；;：:、 ") + "…"
+
+
+def _cover_line_limit(line_count: int) -> int:
+    """Per-line char cap that loosens as we allow more lines, so longer titles
+    keep more of their tail instead of being aggressively truncated."""
+    return {1: 20, 2: 18, 3: 14}.get(line_count, 12)
 
 def _closing_items(insights: list[dict]) -> list[dict]:
     items = []
@@ -634,24 +668,37 @@ def _page_from_card(
     brand: dict,
 ) -> dict:
     original_title = card.get("title", "")
-    title = _growth_title(original_title) if card.get("strategy") == "growth-depth" and role == "insight" else original_title
+    title = original_title if card.get("title_lines") else (_growth_title(original_title) if card.get("strategy") == "growth-depth" and role == "insight" else original_title)
     body = card.get("body", "")
     page_id = f"xhs-{index:02d}"
     insight_number = card.get("insight_index") or max(index - 1, 1)
     image = _asset_for_page(image_assets, page_id, card.get("insight_index"))
     chips = _chip_items(title, body, profile)
     display_index = f"{int(insight_number):02d}" if role == "insight" else f"{index:02d}"
-    metric_source_text = f"{title} {body} {card.get('reader_takeaway', '')}"
+    pullquote = str(card.get("pullquote") or "").strip()
+    subhead = str(card.get("subhead") or "").strip()
+    metric_source_text = f"{title} {body} {pullquote}"
     metric_tokens = _extract_metric_tokens(metric_source_text, limit=4)
+    title_variant = title_variants(title, recipe)
+    card_title_lines = [str(line).strip() for line in (card.get("title_lines") or []) if str(line).strip()]
     page = {
         "id": page_id,
         "platform": "xhs",
         "role": role,
         "recipe": recipe,
         "title": title,
-        "title_lines": semantic_title_lines(title, target=11 if mode == "editorial" else 10, max_lines=3, min_tail=3),
+        "display_title": title,
+        "short_title": title_variant["short_title"],
+        "title_lines": card_title_lines or semantic_title_lines(title, target=title_variant["title_budget"]["line_chars"], max_lines=8, min_tail=3),
+        "title_budget": {**title_variant["title_budget"], "max_lines": 8},
         "original_title": original_title,
+        "subhead": subhead,
         "body": body,
+        "source_body": card.get("source_body", body),
+        "details": card.get("details") or [],
+        "copy_density": card.get("copy_density", ""),
+        "min_payload_ok": card.get("min_payload_ok", False),
+        "payload_chars": card.get("payload_chars", 0),
         "kicker": {
             "cover": "Issue 01",
             "insight": f"Insight {int(insight_number):02d}",
@@ -662,12 +709,13 @@ def _page_from_card(
         "footer": f"{source.get('channel', 'Chora')} · Rhizomata",
         "insight_index": card.get("insight_index"),
         "display_index": display_index,
-        "points": _split_points(body, limit=4),
-        "items": [],
+        "points": card.get("points") or _split_points(body, limit=5),
+        "items": card.get("details") or [],
         "source_title": source.get("title", ""),
         "image": image,
         "image_request": _request_for_page(image_assets, page_id),
-        "reader_takeaway": card.get("reader_takeaway", ""),
+        "pullquote": pullquote,
+        "reader_takeaway": pullquote or card.get("reader_takeaway", ""),
         "chips": chips,
         "strategy": card.get("strategy", "archive"),
         "content_profile": profile,
@@ -678,10 +726,13 @@ def _page_from_card(
         "qa_flags": [],
     }
     if role == "cover":
-        # Cover 標題雙重 cap：先 _short_cover_lines 切分，再硬限 ≤8 中文字
+        # Cover 標題：先 _short_cover_lines 切分，再按行數放宽每行字數上限
         raw_lines = card.get("title_lines") or _short_cover_lines(source.get("title", title))
-        page["title_lines"] = [_cap_title_chars(line, 12) for line in raw_lines][:2]
+        line_cap = _cover_line_limit(min(len(raw_lines), 3))
+        page["title_lines"] = [_cap_title_chars(line, line_cap) for line in raw_lines][:3]
         page["title"] = "\n".join(page["title_lines"])
+        page["display_title"] = page["title"]
+        page["short_title"] = "".join(page["title_lines"][:1])[:10]
     if role == "closing":
         page["items"] = card.get("items") or _closing_items(insights)
         page["cta"] = {
@@ -736,6 +787,7 @@ def build_xhs_pages(package: dict, max_cards: int | None = None, mode: str = "ed
         max_cards=max_cards,
         epilogue=package.get("philosophical_epilogue"),
         strategy="growth-depth" if mode == "editorial" else "archive",
+        card_copies=package.get("card_copy"),
     )
 
     pages = []
@@ -753,9 +805,14 @@ def build_xhs_pages(package: dict, max_cards: int | None = None, mode: str = "ed
         if mode == "editorial" and role == "cover" and has_image and has_subject_map:
             recipe = "M16" if previous_recipe != "M16" else "M01"
         elif mode == "editorial" and role == "insight":
+            hinted_recipe = card.get("recipe_hint") if card.get("recipe_hint") != previous_recipe else ""
+            if hinted_recipe in ("M02", "M06", "M10") and not has_image:
+                hinted_recipe = ""
             recipe = (
                 _choose_editorial_category_recipe(card, has_image, previous_recipe, category)
+                or ("M10" if has_image and previous_recipe != "M10" else "")
                 or _sequence_recipe(category, mode, role, offset, previous_recipe, has_image, has_subject_map)
+                or hinted_recipe
                 or _choose_insight_recipe(card, has_image, previous_recipe, offset, profile)
             )
         elif mode == "swiss" and role == "insight":

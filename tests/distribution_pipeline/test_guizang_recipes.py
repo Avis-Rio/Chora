@@ -318,6 +318,7 @@ def test_render_atmospheric_thesis_uses_accent_number_and_callout():
         "recipe": "M09",
         "title": "研究品位的本质是时间管理。",
         "body": "判断哪个方向值得追，比执行能力更重要。",
+        "pullquote": "判断哪个方向值得追，比执行能力更重要。",
         "kicker": "Insight 08",
         "footer": "Chora",
         "display_index": "08",

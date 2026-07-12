@@ -19,12 +19,25 @@ class FeishuService:
     """Feishu Bitable API wrapper."""
     
     # Default field name aliases for resilient schema mapping.
-    # Each internal key maps to one or more Feishu field names to try in order.
+    #
+    # Each internal key maps to one or more Feishu column names to try in
+    # ``DEFAULT_FIELD_ALIASES`` order. Resolution behaviour:
+    #
+    #   1. The aliases list is iterated strictly left-to-right.
+    #   2. The **first alias that exists** in the live Bitable schema wins.
+    #   3. Remaining aliases are not consulted.
+    #
+    # This guarantees deterministic behaviour even when several aliases
+    # coexist in the live table. Operators add new alias variants here as
+    # new schemas are encountered; do **not** drop earlier aliases silently,
+    # since down-stream tables may still rely on them.
     DEFAULT_FIELD_ALIASES = {
         "title": ["标题", "Title"],
         "id": ["记录ID", "ID", "内容ID"],
         "channel": ["频道", "Channel", "来源频道"],
-        "rewritten": ["正文", "摘要", "内容", " rewritten"],
+        # Primary is "正文" (full rewrite). "摘要" is the AI summary;
+        # "内容" is the legacy column kept for backwards compatibility.
+        "rewritten": ["正文", "摘要", "内容"],
         "guests": ["嘉宾", "Guests", "主讲人"],
         "quotes": ["金句渲染", "金句", "Quotes", "Highlight"],
         "transcript": ["原文逐字稿", "Transcript", "逐字稿"],
@@ -75,18 +88,20 @@ class FeishuService:
         """Get tenant access token from Feishu API."""
         if self.access_token and datetime.now().timestamp() < self.token_expires:
             return self.access_token
-        
+
         url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
         headers = {"Content-Type": "application/json"}
+
+        feishu_cfg = self.config.get('feishu', self.config)
         data = {
-            "app_id": self.config.get('app_id'),
-            "app_secret": self.config.get('app_secret')
+            "app_id": feishu_cfg.get('app_id'),
+            "app_secret": feishu_cfg.get('app_secret'),
         }
-        
+
         try:
             response = self._request("POST", url, headers=headers, json=data)
             result = response.json()
-            
+
             if result.get('code') == 0:
                 self.access_token = result.get('tenant_access_token')
                 self.token_expires = datetime.now().timestamp() + result.get('expire', 7200) - 60
@@ -94,7 +109,8 @@ class FeishuService:
             else:
                 print(f"❌ Failed to get access token: {result}")
                 return None
-        except:
+        except Exception as exc:
+            print(f"❌ Exception getting access token: {exc}")
             return None
     
     def _headers(self):
@@ -116,8 +132,9 @@ class FeishuService:
     
     def _base_url(self):
         """Get base URL for bitable API."""
-        base_id = self.config.get('base_id')
-        table_id = self.config.get('table_id')
+        feishu_cfg = self.config.get('feishu', self.config)
+        base_id = feishu_cfg.get('base_id')
+        table_id = feishu_cfg.get('table_id')
         return f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base_id}/tables/{table_id}"
     
     def list_records(self, page_size=100):
@@ -196,8 +213,9 @@ class FeishuService:
         Returns a dict mapping field_name -> field_type (e.g. 'text', 'single_select').
         Falls back to field-name-only list if API shape is unexpected.
         """
-        base_id = self.config.get('base_id')
-        table_id = self.config.get('table_id')
+        feishu_cfg = self.config.get('feishu', self.config)
+        base_id = feishu_cfg.get('base_id')
+        table_id = feishu_cfg.get('table_id')
         url = f"https://open.feishu.cn/open-apis/bitable/v1/apps/{base_id}/tables/{table_id}/fields"
 
         try:
@@ -207,7 +225,7 @@ class FeishuService:
             if result.get('code') == 0:
                 items = result.get('data', {}).get('items', [])
                 return {
-                    f.get('field_name'): f.get('type', 'text')
+                    f.get('field_name'): self._feishu_type_to_internal(f.get('type'))
                     for f in items
                     if f.get('field_name')
                 }
@@ -217,6 +235,23 @@ class FeishuService:
         except Exception as e:
             print(f"⚠️ Error getting fields: {e}")
             return {}
+
+    @staticmethod
+    def _feishu_type_to_internal(type_value):
+        """Map Feishu Bitable numeric/string type to internal type name."""
+        mapping = {
+            1: 'text',
+            2: 'number',
+            3: 'single_select',
+            4: 'multi_select',
+            5: 'date',
+            7: 'checkbox',
+            11: 'attachment',
+            15: 'url',
+        }
+        if isinstance(type_value, int):
+            return mapping.get(type_value, 'text')
+        return str(type_value).lower() if type_value else 'text'
     
     def upload_image(self, image_path):
         """Upload image to Feishu Drive and return file_token.
@@ -245,7 +280,7 @@ class FeishuService:
             data = {
                 'file_name': file_name,
                 'parent_type': 'bitable_image',
-                'parent_node': self.config.get('base_id'),
+                'parent_node': self.config.get('feishu', self.config).get('base_id'),
                 'size': str(file_size)
             }
             
@@ -287,34 +322,43 @@ class FeishuService:
         return None, None
 
     def _format_field_value(self, value, field_type):
-        """Format a Python value according to Feishu Bitable field type."""
+        """Format a Python value according to Feishu Bitable field type.
+
+        Feishu Bitable expects:
+        - SingleSelect: plain option name string
+        - MultiSelect: list of option name strings
+        - Url: {'link': ..., 'text': ...} dict
+        - Attachment: list of {'file_token': ...} dicts
+        """
         if value is None:
             return None
 
         field_type = (field_type or 'text').lower()
 
         if field_type == 'single_select':
+            # Feishu expects a plain string of the option name.
             if isinstance(value, dict) and 'text' in value:
-                return value
-            return {'text': str(value)}
+                return value['text']
+            return str(value).strip()
 
         if field_type == 'multi_select':
+            # Feishu expects a list of plain option name strings.
             if isinstance(value, list):
-                formatted = []
+                out = []
                 for item in value:
                     if isinstance(item, dict) and 'text' in item:
-                        formatted.append(item)
+                        out.append(item['text'])
                     elif isinstance(item, str):
                         for part in item.split(','):
                             part = part.strip()
                             if part:
-                                formatted.append({'text': part})
+                                out.append(part)
                     else:
-                        formatted.append({'text': str(item)})
-                return formatted
+                        out.append(str(item))
+                return out
             if isinstance(value, str):
-                return [{'text': part.strip()} for part in value.split(',') if part.strip()]
-            return [{'text': str(value)}]
+                return [p.strip() for p in value.split(',') if p.strip()]
+            return [str(value)]
 
         if field_type == 'checkbox':
             return bool(value)
@@ -558,12 +602,13 @@ class FeishuService:
 def main():
     """Main entry point."""
     service = FeishuService()
-    
-    if not service.config.get('app_id'):
+
+    feishu_cfg = service.config.get('feishu', {})
+    if not feishu_cfg.get('app_id'):
         print("❌ Feishu not configured. Please set up config/feishu.yaml")
         print("See config/feishu-setup.md for instructions.")
         return
-    
+
     if len(sys.argv) > 1:
         if sys.argv[1] == 'sync':
             # Parse arguments

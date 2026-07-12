@@ -47,9 +47,12 @@ def _push_unique(values: list[str], seen: set[str], value: str) -> None:
 
 # Cover / lead / detail 字數上限（防渲染溢出）
 HERO_MAX_CHARS = 12      # cover hero h1 允許中文字符數
-LEAD_MAX_CHARS = 110     # hero_question / structure lead 段落
-DETAIL_MAX_CHARS = 70    # density_panel / detail 條目
+LEAD_MAX_CHARS = 120     # hero_question / structure lead 段落
+DETAIL_MAX_CHARS = 76    # density_panel / detail 條目
 CAPTION_MAX_CHARS = 60
+MIN_PAYLOAD_CHARS = 190
+MIN_DETAIL_COUNT = 3
+MIN_POINT_COUNT = 3
 
 
 def _cap_chars(text: str, limit: int) -> str:
@@ -63,19 +66,30 @@ def _cap_chars(text: str, limit: int) -> str:
 def build_copy_slots(page: dict) -> dict:
     title = str(page.get("title") or "").strip()
     body = str(page.get("body") or "").strip()
+    subhead = str(page.get("subhead") or "").strip()
+    pullquote = str(page.get("pullquote") or "").strip()
     point_values = [str(point or "").strip() for point in page.get("points") or []]
-    sentences = point_values or split_sentences(body, limit=6)
+    detail_values = [str(point or "").strip() for point in page.get("details") or []]
 
     seen = {norm_text(title)} if norm_text(title) else set()
+    if norm_text(pullquote):
+        seen.add(norm_text(pullquote))
     unique_sentences: list[str] = []
-    for sentence in sentences:
+    for sentence in [subhead, *point_values, *split_sentences(body, limit=6), *split_sentences(page.get("source_body", ""), limit=8)]:
         _push_unique(unique_sentences, seen, sentence)
 
     lead = unique_sentences[0] if unique_sentences else body
-    details = unique_sentences[1:5]
+    detail_seen = {norm_text(title)} if norm_text(title) else set()
+    if norm_text(lead):
+        detail_seen.add(norm_text(lead))
+    details: list[str] = []
+    for detail in [*detail_values, *unique_sentences[1:6], *split_sentences(page.get("source_body", ""), limit=8)]:
+        _push_unique(details, detail_seen, detail)
+        if len(details) >= 5:
+            break
 
     caption = ""
-    for candidate in (page.get("reader_takeaway"), page.get("footer"), page.get("source_title")):
+    for candidate in (pullquote, page.get("footer"), page.get("source_title")):
         candidate_text = str(candidate or "").strip()
         if candidate_text and not _is_duplicate(candidate_text, seen):
             caption = candidate_text
@@ -84,13 +98,36 @@ def build_copy_slots(page: dict) -> dict:
 
     role = page.get("role", "")
     hero_cap = HERO_MAX_CHARS if role == "cover" else 40
+    payload_chars = len(norm_text(" ".join([title, lead, *details, *point_values, pullquote])))
+    point_count = len([point for point in point_values if norm_text(point)])
+    detail_count = len(details)
+    density_ok = role != "insight" or (
+        payload_chars >= MIN_PAYLOAD_CHARS
+        and detail_count >= MIN_DETAIL_COUNT
+        and point_count >= MIN_POINT_COUNT
+    )
+    qa_flags = []
+    if role == "insight" and not density_ok:
+        if payload_chars < MIN_PAYLOAD_CHARS:
+            qa_flags.append("low_payload")
+        if detail_count < MIN_DETAIL_COUNT:
+            qa_flags.append("few_details")
+        if point_count < MIN_POINT_COUNT:
+            qa_flags.append("few_points")
     return {
         "hero": _cap_chars(title, hero_cap),
         "lead": _cap_chars(lead, LEAD_MAX_CHARS),
         "details": [_cap_chars(d, DETAIL_MAX_CHARS) for d in details],
-        "sentences": unique_sentences[:5],
+        "points": [_cap_chars(p, DETAIL_MAX_CHARS) for p in point_values[:6]],
+        "sentences": unique_sentences[:6],
         "caption": _cap_chars(caption, CAPTION_MAX_CHARS),
         "meta": page.get("footer", ""),
+        "payload_chars": payload_chars,
+        "detail_count": detail_count,
+        "point_count": point_count,
+        "has_pullquote": bool(pullquote),
+        "density_ok": density_ok,
+        "qa_flags": qa_flags,
     }
 
 

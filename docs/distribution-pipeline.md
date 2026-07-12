@@ -81,7 +81,6 @@ python3 -m playwright install chromium
 distribution_pipeline/automation.py
 process_video.py
 process_podcast.py
-process_feed.py
 batch_rewrite.py --generate-distribution
 ```
 
@@ -316,7 +315,7 @@ python3 -m playwright install chromium
 
 - 上游 `SKILL.md` / `README.md` 明文："生图本身不在 Skill 范围内，取图协议 A/B/C（用户图 / AI 生图 / 网络取图）由宿主 Agent 决定"
 - 本流水线定位为 A/B 通道的 B 通道实现方（`distribution_pipeline/assets/providers.py`：Pexels / Unsplash / Wallhaven / Flickr CC）+ 用户图自动接入
-- C 通道（AI 生图）由 Chora 端决定，候选为复用 `generate_cover.py`（Gemini `gemini-3-pro-image-preview`）
+- C 通道（AI 生图）由 Chora 端决定，候选为复用 `generate_cover.py`（Gemini `gemini-3.1-flash-image-preview`，可在 `.env` 中通过 `GEMINI_MODEL` 覆盖）
 
 ## Category Router 升级（2026-06-14 · 乙项）
 

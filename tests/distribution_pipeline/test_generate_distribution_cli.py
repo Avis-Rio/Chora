@@ -73,6 +73,25 @@ def test_guizang_no_export_skips_browser_validator(tmp_path, monkeypatch):
     assert "image export is disabled" in manifest
 
 
+def test_guizang_fail_on_quality_gate_blocks_unpublishable_package(tmp_path):
+    content_dir = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
+
+    try:
+        run(
+            content_dir=content_dir,
+            output_root=tmp_path,
+            platform="xhs",
+            renderer="guizang",
+            export_images=False,
+            require_browser_validator=True,
+            fail_on_quality_gate=True,
+        )
+    except RuntimeError as exc:
+        assert "Guizang quality gate failed" in str(exc)
+    else:
+        raise AssertionError("quality gate should block skipped browser validation")
+
+
 def test_guizang_renderer_receives_image_asset_mode(tmp_path, monkeypatch):
     content_dir = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
     captured = {}

@@ -135,6 +135,94 @@ def test_review_static_guizang_html_rejects_visible_proxy_placeholders(tmp_path)
     assert any("proxy placeholder visible" in line for line in status["lines"])
 
 
+def test_review_static_guizang_html_rejects_sparse_insight_payload(tmp_path):
+    (tmp_path / "index.html").write_text(
+        """
+        <section class="poster role-insight" id="xhs-03">
+          <h2>知识的重量</h2>
+          <p>判断比执行重要。</p>
+        </section>
+        """,
+        encoding="utf-8",
+    )
+
+    status = review_static_guizang_html(tmp_path, mode="editorial")
+
+    assert status["status"] == "fail"
+    assert any("insufficient visible payload" in line for line in status["lines"])
+
+
+def test_review_static_guizang_html_rejects_workflow_density_failure(tmp_path):
+    (tmp_path / "index.html").write_text(
+        """
+        <section class="poster role-insight" id="xhs-03" data-role="insight" data-density-ok="false" data-payload-chars="92" data-detail-count="1">
+          <h2>知识的重量</h2>
+          <p>判断比执行重要。收藏让知识变得可触摸。版本也保存阅读史。</p>
+        </section>
+        """,
+        encoding="utf-8",
+    )
+
+    status = review_static_guizang_html(tmp_path, mode="editorial")
+
+    assert status["status"] == "fail"
+    assert any("workflow density gate failed" in line for line in status["lines"])
+    assert any("workflow payload too sparse" in line for line in status["lines"])
+    assert any("workflow detail count too low" in line for line in status["lines"])
+
+
+def test_review_static_guizang_html_strict_blocks_qa_flags_and_missing_artifacts(tmp_path):
+    (tmp_path / "index.html").write_text(
+        """
+        <section class="poster role-insight" id="xhs-03" data-role="insight" data-qa-flags="body_short" data-density-ok="true" data-payload-chars="180" data-detail-count="3">
+          <h2>知识的重量</h2>
+          <p>判断比执行重要。收藏让知识变得可触摸。版本也保存阅读史。阅读经验连接审美、材料、时间与思想。</p>
+          <p>这些线索让书不再只是信息容器，而成为思想训练的现场。</p>
+          <p>因此读者需要学习如何辨识版本、边注、纸张与翻译背后的文化秩序。</p>
+        </section>
+        """,
+        encoding="utf-8",
+    )
+
+    status = review_static_guizang_html(tmp_path, mode="editorial", strict=True)
+
+    assert status["status"] == "fail"
+    assert any("workflow qa flags" in line for line in status["lines"])
+    assert any("no exported PNG files" in line for line in status["lines"])
+    assert any("no 360px thumbnail files" in line for line in status["lines"])
+
+
+def test_run_guizang_validator_records_quality_gate(tmp_path, monkeypatch):
+    (tmp_path / "index.html").write_text("<section>No overlay</section>", encoding="utf-8")
+
+    def fake_run(args, check, capture_output, text, env):
+        return subprocess.CompletedProcess(args, 0, stdout="PASS xhs-01\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    status = run_guizang_validator(tmp_path, mode="editorial")
+
+    assert status["quality_gate"]["publishable"] is True
+
+
+def test_run_guizang_validator_blocks_skipped_browser_when_required(tmp_path, monkeypatch):
+    def fake_run(args, check, capture_output, text, env):
+        return subprocess.CompletedProcess(
+            args,
+            1,
+            stdout="",
+            stderr="Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'playwright'",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    status = run_guizang_validator(tmp_path, mode="editorial", browser_required=True)
+
+    assert status["status"] == "skipped"
+    assert status["quality_gate"]["publishable"] is False
+    assert any(reason["code"] == "R18" for reason in status["quality_gate"]["blocking_reasons"])
+
+
 def test_run_guizang_validator_records_failure_without_swallowing(tmp_path, monkeypatch):
     (tmp_path / "index.html").write_text("<section>No overlay</section>", encoding="utf-8")
     captured = {}

@@ -4,6 +4,7 @@ from html import escape
 from distribution_pipeline.renderers.guizang.content_allocator import build_copy_slots
 from distribution_pipeline.renderers.guizang.screenshot_treatment import render_image_frame as _render_image_frame
 from distribution_pipeline.renderers.guizang.title_breaker import semantic_title_lines
+from distribution_pipeline.renderers.guizang.title_budget import title_budget_for
 
 
 SCAFFOLD_LABELS = {"注记", "脉络", "张力", "信号", "判断", "余波", "边界", "后果"}
@@ -209,15 +210,47 @@ def _title_lines_from_value(value, target: int = 11, max_lines: int = 2) -> list
     return semantic_title_lines(str(value or ""), target=target, max_lines=max_lines, min_tail=3)
 
 
-def _title_lines(page: dict, target: int = 11, max_lines: int = 2) -> list[str]:
-    return _title_lines_from_value(page.get("title_lines") or page.get("title", ""), target=target, max_lines=max_lines)
+def _budget(page: dict):
+    return title_budget_for(page.get("recipe"))
 
 
-def _title_plain(page: dict, target: int = 11, max_lines: int = 2) -> str:
+def _section_attrs(page: dict) -> str:
+    slots = _copy_slots(page)
+    qa_flags = page.get("qa_flags") or []
+    if isinstance(qa_flags, str):
+        qa_flags = [qa_flags]
+    flags = " ".join(str(flag).strip() for flag in qa_flags if str(flag).strip())
+    density_ok = slots.get("density_ok")
+    if density_ok is None:
+        density_ok = page.get("density_ok")
+    if density_ok is None:
+        density_ok = ""
+    elif isinstance(density_ok, bool):
+        density_ok = "true" if density_ok else "false"
+    return (
+        f'data-role="{_e(page.get("role", ""))}" '
+        f'data-recipe="{_e(page.get("recipe", ""))}" '
+        f'data-title-max-lines="{_e((page.get("title_budget") or {}).get("max_lines", ""))}" '
+        f'data-qa-flags="{_e(flags)}" '
+        f'data-density-ok="{_e(density_ok)}" '
+        f'data-payload-chars="{_e(slots.get("payload_chars", ""))}" '
+        f'data-detail-count="{_e(slots.get("detail_count", ""))}"'
+    )
+
+
+def _title_lines(page: dict, target: int | None = None, max_lines: int | None = None) -> list[str]:
+    budget = _budget(page)
+    target = target or int((page.get("title_budget") or {}).get("line_chars") or budget.line_chars)
+    max_lines = max_lines or int((page.get("title_budget") or {}).get("max_lines") or budget.max_lines)
+    value = page.get("title_lines") or page.get("display_title") or page.get("title", "")
+    return _title_lines_from_value(value, target=target, max_lines=max_lines)
+
+
+def _title_plain(page: dict, target: int | None = None, max_lines: int | None = None) -> str:
     return "".join(_title_lines(page, target=target, max_lines=max_lines))
 
 
-def _title_html(page: dict, target: int = 11, max_lines: int = 2, accent: bool = False) -> str:
+def _title_html(page: dict, target: int | None = None, max_lines: int | None = None, accent: bool = False) -> str:
     lines = _title_lines(page, target=target, max_lines=max_lines)
     if accent:
         return "<br>".join(_accent_title(line) for line in lines)
@@ -255,15 +288,23 @@ def _takeaway_band(page: dict, exclude: list[str] | None = None) -> str:
         </div>"""
 
 
-def _title_style(title: str, base_px: int = 88) -> str:
+def _title_style(title: str, base_px: int = 88, page: dict | None = None) -> str:
+    """Return inline style fragment using recipe title budget first, length second."""
+    budget_px = None
+    if page and page.get("title_budget"):
+        budget_px = (page.get("title_budget") or {}).get("font_px") or title_budget_for(page.get("recipe")).font_px
+    base = int(budget_px or base_px)
     length = len(str(title or ""))
-    if length <= 18:
-        return f' style="font-size:{base_px}px"'
-    if length <= 24:
-        return f' style="font-size:{max(base_px - 8, 52)}px;line-height:1.12"'
-    if length <= 30:
-        return f' style="font-size:{max(base_px - 22, 50)}px;line-height:1.12"'
-    return f' style="font-size:{max(base_px - 42, 48)}px;line-height:1.14"'
+    if length <= 14:
+        suffix = ";line-height:1.12" if page and page.get("title_budget") else ""
+        return f' style="font-size:{base}px{suffix}"'
+    if length <= 20:
+        return f' style="font-size:{max(base - 4, 56)}px;line-height:1.14"'
+    if length <= 28:
+        return f' style="font-size:{max(base - 10, 52)}px;line-height:1.14"'
+    if length <= 40:
+        return f' style="font-size:{max(base - 24, 42)}px;line-height:1.16"'
+    return f' style="font-size:{max(base - 34, 34)}px;line-height:1.18"'
 
 
 def _footer(page: dict) -> str:
@@ -381,7 +422,13 @@ def _image_figure(image: dict, fig_label: str = "FIG. 01", ratio: str = "r-4x3")
 def _page_items(page: dict, limit: int = 6) -> list[dict]:
     items = page.get("items") or []
     if items:
-        return items[:limit]
+        normalized = []
+        for index, item in enumerate(items[:limit], start=1):
+            if isinstance(item, dict):
+                normalized.append(item)
+            else:
+                normalized.append({"index": f"{index:02d}", "title": "", "note": str(item or "").strip()})
+        return normalized
     points = page.get("points") or _paragraphs(page.get("body", ""), limit=limit)
     labelled = _labelled_items(points, limit=limit)
     if labelled:
@@ -397,8 +444,17 @@ def _density_items(page: dict, limit: int = 3, exclude: list[str] | None = None)
     chips = _visible_chips(page)
     if chips:
         return chips[:limit]
-    points = page.get("points") or _paragraphs(page.get("body", ""), limit=limit)
-    items = _labelled_items(points, exclude=exclude, limit=limit)
+    slots = _copy_slots(page)
+    candidates = []
+    for key in ("points", "details", "sentences"):
+        values = slots.get(key) or []
+        if isinstance(values, str):
+            values = [values]
+        candidates.extend(str(value or "").strip() for value in values if str(value or "").strip())
+    candidates.extend(str(value or "").strip() for value in (page.get("points") or []) if str(value or "").strip())
+    candidates.extend(str(value or "").strip() for value in (page.get("details") or []) if str(value or "").strip())
+    candidates.extend(_paragraphs(page.get("body", ""), limit=limit + 2))
+    items = _labelled_items(candidates, exclude=exclude, limit=limit)
     if items:
         return items
     return []
@@ -438,7 +494,7 @@ def _density_panel(
 
 def _editorial_shell(page: dict, inner: str) -> str:
     return f"""
-    <section class="poster xhs" id="{_e(page.get("id"))}">
+    <section class="poster xhs" id="{_e(page.get("id"))}" {_section_attrs(page)}>
       <canvas class="mag-bg" data-bg="ink-flow"></canvas>
       <div class="paper-wash"></div>
       <div class="grain"></div>
@@ -460,7 +516,7 @@ def _render_editorial_cover(page: dict) -> str:
         </div>
         <div class="stack gap-2">
           <p class="kicker">Cover · Rednote</p>
-          <h1 class="h-display"{_title_style("".join(title_lines), base_px=92)}>{title}</h1>
+          <h1 class="h-display"{_title_style("".join(title_lines), base_px=92, page=page)}>{title}</h1>
           <p class="h-sub">{_e(page.get("source_title", "Editorial Card Set"))}</p>
         </div>
 {image_html}
@@ -477,8 +533,8 @@ def _render_field_note_photo(page: dict) -> str:
     if not image.get("src"):
         return _render_marginalia(page)
     paragraphs = _paragraphs(page.get("body", ""), limit=3)
-    lead = paragraphs[0] if paragraphs else page.get("body", "")
-    note = " ".join(_without_repeats(paragraphs[1:], exclude=[lead], limit=2)) or page.get("reader_takeaway", "")
+    lead = page.get("subhead") or (paragraphs[0] if paragraphs else page.get("body", ""))
+    note = page.get("pullquote", "")
     image_html = _render_image_frame(image, page=page, mode=page.get("mode", "editorial"), fig_label=f"FIELD {_display_number(page)}", default_ratio="r-3x4")
     inner = f"""
       <div class="content stack gap-3">
@@ -488,13 +544,10 @@ def _render_field_note_photo(page: dict) -> str:
         <div style="display:grid;grid-template-columns:5fr 4fr;gap:42px;align-items:stretch;min-height:960px">
           <div style="display:flex;flex-direction:column;justify-content:space-between">
             <div class="stack gap-3">
-              <h2 class="h-xl"{_title_style(_title_plain(page), base_px=76)}>{_title_html(page, accent=True)}</h2>
+              <h2 class="h-xl"{_title_style(_title_plain(page), base_px=76, page=page)}>{_title_html(page, accent=True)}</h2>
               <p class="lead" style="font-size:34px;line-height:1.42">{_e(lead)}</p>
             </div>
-            <div class="callout" style="font-size:28px;line-height:1.35">
-              {_e(note or image.get("caption") or "这张图是观点的现场证据。")}
-              <span class="callout-src">field note · {_display_number(page)}</span>
-            </div>
+            {f'<div class="callout" style="font-size:28px;line-height:1.35">{_e(note)}<span class="callout-src">field note · {_display_number(page)}</span></div>' if note else ''}
           </div>
 {image_html}
         </div>
@@ -504,7 +557,7 @@ def _render_field_note_photo(page: dict) -> str:
 
 def _render_evidence_feature(page: dict) -> str:
     paragraphs = _paragraphs(page.get("body", ""), limit=5)
-    lead = paragraphs[0] if paragraphs else page.get("body", "")
+    lead = page.get("subhead") or (paragraphs[0] if paragraphs else page.get("body", ""))
     image = page.get("image") or {}
     image_html = _render_image_frame(image, page=page, mode=page.get("mode", "editorial"), fig_label=f"FIG. {str(page.get('id', 'xhs-02'))[-2:]}", default_ratio="r-4x3")
     detail_items = _labelled_items(paragraphs[1:] or page.get("points", []), exclude=[lead], limit=3)
@@ -523,19 +576,18 @@ def _render_evidence_feature(page: dict) -> str:
         <div class="ledger">
 {rows}
         </div>""" if rows else ""
-    image_caption = _image_caption_label(image.get("caption") or "concept evidence")
-    source_band = "" if rows else f"""
+    callout_text = page.get("pullquote", "")
+    source_band = "" if rows or not callout_text else f"""
         <div class="callout" style="font-size:28px;line-height:1.25">
-          视觉线索：{_e(image_caption)}
+          {_e(callout_text)}
           <span class="callout-src">{_e(page.get("kicker", "Evidence"))}</span>
         </div>"""
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Evidence"))} · Evidence</p>
-        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=72)}>{_title_html(page, accent=True)}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=72, page=page)}>{_title_html(page, accent=True)}</h2>
         <p class="lead">{_e(lead)}</p>
 {image_html}
-{_takeaway_band(page, exclude=[lead])}
 {ledger_html}
 {source_band}
       </div>"""
@@ -559,7 +611,7 @@ def _render_checklist(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Checklist"))} · Checklist</p>
-        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78, page=page)}>{_title_html(page, accent=True)}</h2>
         <div class="ledger" style="min-height:680px;justify-content:space-between">
 {rows}
         </div>
@@ -595,7 +647,7 @@ def _render_evidence_wall(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Evidence Wall"))} · Evidence Wall</p>
-        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=76)}>{_title_html(page, accent=True)}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=76, page=page)}>{_title_html(page, accent=True)}</h2>
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:34px;align-items:stretch">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px">
 {cells}
@@ -635,10 +687,9 @@ def _render_editorial_essay(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Insight"))}</p>
-        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=82)}>{_title_html(page, accent=True)}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=82, page=page)}>{_title_html(page, accent=True)}</h2>
         <hr class="rule-accent">
 {body_html}
-{_takeaway_band(page, exclude=[lead, *body_parts])}
 {density_html}
       </div>"""
     return _editorial_shell(page, inner)
@@ -747,7 +798,7 @@ def _render_before_after(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Before · After"))}</p>
-        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78, page=page)}>{_title_html(page, accent=True)}</h2>
         <div class="beforeafter" style="min-height:760px">
           <div class="ba-block before">
             <p class="kicker">{_e(before.get("kicker", "Before · 旧"))}</p>
@@ -776,7 +827,7 @@ def _render_image_led_cover(page: dict) -> str:
     focus = _e(subject_map.get("focus", "primary subject in middle third"))
     object_position = image.get("object_position", "center 50%")
     return f"""
-    <section class="poster xhs" id="{_e(page.get("id"))}">
+    <section class="poster xhs" id="{_e(page.get("id"))}" {_section_attrs(page)}>
       <!-- subject map:
            focus: {focus}
            safe text zone: {safe_zone}
@@ -788,7 +839,7 @@ def _render_image_led_cover(page: dict) -> str:
       <div class="content" style="position:relative;height:100%;color:#f5f1e8;padding:72px 80px;display:flex;flex-direction:column;z-index:1">
         <p class="kicker" style="color:#f5f1e8;opacity:.86;font-family:var(--mono);font-size:22px;letter-spacing:.22em;text-transform:uppercase;margin:0">{_e(page.get("kicker", "Cover · Image Led"))}</p>
         <div style="flex:1"></div>
-        <h1 style="font-family:var(--serif-zh);font-weight:500;font-size:78px;line-height:1.14;letter-spacing:.06em;color:#f5f1e8;margin:0 0 18px;max-width:100%;overflow-wrap:break-word;word-break:keep-all">{title}</h1>
+        <h1 style="font-family:var(--serif-zh);font-weight:500;font-size:62px;line-height:1.18;letter-spacing:.04em;color:#f5f1e8;margin:0 0 18px;max-width:100%;overflow-wrap:break-word;word-break:keep-all">{title}</h1>
         <div style="border-top:1px solid rgba(245,241,232,.35);padding-top:14px;font-family:var(--mono);font-size:19px;letter-spacing:.22em;text-transform:uppercase;color:#f5f1e8;opacity:.86">
           {_e(body)}
         </div>
@@ -800,6 +851,12 @@ def _render_atmospheric_thesis(page: dict) -> str:
     paragraphs = _paragraphs(page.get("body", ""), limit=2)
     lead = " ".join(paragraphs) if paragraphs else page.get("body", "")
     number = _display_number(page)
+    details = _density_items(page, limit=3, exclude=[page.get("title", ""), lead, page.get("pullquote", "")])
+    detail_html = "\n".join(
+        f'<div style="border-top:1px solid var(--line);padding-top:12px"><span style="font-family:var(--mono);font-size:16px;color:var(--accent);letter-spacing:.12em">{_e(item.get("index"))}</span><p style="margin-top:8px;font-family:var(--serif-zh);font-size:22px;line-height:1.42;color:var(--ink)">{_e(_item_primary(item))}</p></div>'
+        for item in details
+    )
+    callout = page.get("pullquote") or _slot_text(page, "caption")
     inner = f"""
       <div class="content stack gap-4" style="justify-content:space-between">
         <div class="issue-row">
@@ -807,14 +864,12 @@ def _render_atmospheric_thesis(page: dict) -> str:
         </div>
         <div style="position:absolute;right:72px;top:128px;font-family:var(--mono);font-size:220px;line-height:.8;color:rgba(var(--accent-rgb),.14);letter-spacing:0">{_e(number)}</div>
         <div class="stack gap-3" style="position:relative;z-index:1">
-          <h2 class="h-display"{_title_style(_title_plain(page, target=12), base_px=82)}>{_title_html(page, target=12, accent=True)}</h2>
+          <h2 class="h-display"{_title_style(_title_plain(page, target=12), base_px=82, page=page)}>{_title_html(page, target=12, accent=True)}</h2>
           <hr class="rule-accent" style="width:180px;height:4px">
+          {f'<p class="lead" style="max-width:760px">{_e(lead)}</p>' if lead else ''}
         </div>
-        <div class="callout" style="font-size:34px;line-height:1.36;max-width:820px">
-          {_e(lead)}
-          <span class="callout-src">核心判断 · {number}</span>
-        </div>
-{_takeaway_band(page, exclude=[lead])}
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;position:relative;z-index:1">{detail_html}</div>
+        {f'<div class="callout" style="font-size:30px;line-height:1.36;max-width:820px">{_e(callout)}<span class="callout-src">核心判断 · {number}</span></div>' if callout else ''}
       </div>"""
     return _editorial_shell(page, inner)
 
@@ -827,10 +882,10 @@ def _render_hero_question(page: dict) -> str:
         <div class="stack gap-3">
           <p class="kicker">{_e(page.get("kicker", "The Question"))}</p>
           <div style="width:160px;height:10px;background:var(--accent);margin-bottom:8px"></div>
-          <h1 class="h-display"{_title_style(_title_plain(page, target=12), base_px=96)}>{_title_html(page, target=12, accent=True)}</h1>
-          <p class="lead" style="font-size:22px;line-height:1.55;max-height:260px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical">{_e(body)}</p>
+          <h1 class="h-display"{_title_style(_title_plain(page, target=12), base_px=104, page=page)}>{_title_html(page, target=12, accent=True)}</h1>
+          <p class="lead" style="font-size:26px;line-height:1.62;max-height:340px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical">{_e(body)}</p>
           <hr class="rule">
-          <p class="kicker">What remains after the argument.</p>
+          <p class="kicker" style="font-size:18px">What remains after the argument.</p>
         </div>
 {_density_panel(page, label="Epilogue Field", min_height=360, exclude=[body])}
       </div>"""
@@ -841,9 +896,7 @@ def _render_ledger(page: dict) -> str:
     if page.get("role") == "closing":
         return _render_closing_note(page)
 
-    items = page.get("items") or _labelled_items(page.get("points", []), limit=4)
-    if not items:
-        items = [{"index": "01", "title": page.get("title", ""), "note": page.get("body", "")}]
+    items = _page_items(page, limit=5)
     rows = "\n".join(
         f"""
           <div class="ledger-row">
@@ -861,7 +914,7 @@ def _render_ledger(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Ledger"))}</p>
-        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78, page=page)}>{_title_html(page, accent=True)}</h2>
         <div class="ledger" style="min-height:{ledger_min_height}px;justify-content:space-between">
 {rows}
         </div>
@@ -872,6 +925,7 @@ def _render_ledger(page: dict) -> str:
 
 def _render_sparse_marginalia(page: dict) -> str:
     paragraphs = _paragraphs(page.get("body", ""), limit=4)
+    pullquote = str(page.get("pullquote") or "").strip()
     body_html = "\n".join(
         f'              <p style="margin:0 0 22px;font-family:var(--serif-zh);font-size:36px;line-height:1.54;color:var(--ink)">{_e(part)}</p>'
         for part in paragraphs
@@ -889,12 +943,12 @@ def _render_sparse_marginalia(page: dict) -> str:
       <div class="content stack gap-4" style="justify-content:space-between">
         <div class="stack gap-3">
           <p class="kicker">{_e(page.get("kicker", "Marginalia"))}</p>
-          <h2 class="h-xl"{_title_style(_title_plain(page), base_px=84)}>{_title_html(page, accent=True)}</h2>
+          <h2 class="h-xl"{_title_style(_title_plain(page), base_px=84, page=page)}>{_title_html(page, accent=True)}</h2>
         </div>
         <div class="sparse-thesis" style="display:grid;grid-template-columns:7fr 3fr;gap:44px;align-items:stretch">
           <div style="min-height:500px;background:var(--paper-2);border-left:4px solid var(--accent);padding:42px 46px;display:flex;flex-direction:column;justify-content:center">
 {body_html}
-            <span style="font-family:var(--mono);font-size:20px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">body as argument</span>
+            {f'<div class="callout" style="font-size:28px;line-height:1.35;margin-top:20px">{_e(pullquote)}<span class="callout-src">核心判断 · {number}</span></div>' if pullquote else '<span style="font-family:var(--mono);font-size:20px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">body as argument</span>'}
           </div>
           <div style="position:relative;border-left:1px solid var(--line);padding-left:28px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden">
             <div style="font-family:var(--mono);font-size:18px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Margin Notes</div>
@@ -922,7 +976,7 @@ def _render_marginalia(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Marginalia"))}</p>
-        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78, page=page)}>{_title_html(page, accent=True)}</h2>
         <div class="marginalia">
           <div>
 {body_html}
@@ -988,7 +1042,7 @@ def _render_pipeline(page: dict) -> str:
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Structure"))}</p>
-        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78)}>{_title_html(page, accent=True)}</h2>
+        <h2 class="h-xl"{_title_style(_title_plain(page), base_px=78, page=page)}>{_title_html(page, accent=True)}</h2>
         <div class="pipeline-v" style="min-height:430px;justify-content:space-between">
 {steps}
         </div>
@@ -1008,7 +1062,7 @@ def _render_structure_prose(page: dict) -> str:
       <div class="content stack gap-4" style="justify-content:space-between">
         <div class="stack gap-3">
           <p class="kicker">{_e(page.get("kicker", "Structure"))}</p>
-          <h2 class="h-xl"{_title_style(_title_plain(page), base_px=82)}>{_title_html(page, accent=True)}</h2>
+          <h2 class="h-xl"{_title_style(_title_plain(page), base_px=82, page=page)}>{_title_html(page, accent=True)}</h2>
         </div>
         <div class="structure-prose" style="display:grid;grid-template-columns:7fr 3fr;gap:44px;align-items:stretch">
           <div style="min-height:520px;background:var(--paper-2);border-left:4px solid var(--accent);padding:46px 50px;display:flex;flex-direction:column;justify-content:center">
@@ -1032,7 +1086,7 @@ def _render_structure_prose(page: dict) -> str:
 def _swiss_shell(page: dict, inner: str, mat_class: str = "") -> str:
     mat = f'\n      <div class="{_e(mat_class)}"></div>' if mat_class else ""
     return f"""
-    <section class="poster xhs" id="{_e(page.get("id"))}">
+    <section class="poster xhs" id="{_e(page.get("id"))}" {_section_attrs(page)}>
 {mat}
 {inner}
     </section>"""

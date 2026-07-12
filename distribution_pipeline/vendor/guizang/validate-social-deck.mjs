@@ -288,21 +288,36 @@ for (const s of sections) {
   // R6 h-xl hard cap
   const cap = HXL_CAPS[meta.board];
   if (cap) {
-    const titles = await s.evaluate(el => {
+    const titles = await s.evaluate((el, capMaxLines) => {
       const out = [];
       for (const n of el.querySelectorAll(".h-xl, .h-hero, .h-display, .h-statement")) {
         const cs = getComputedStyle(n);
         const size = parseFloat(cs.fontSize);
         const lineH = parseFloat(cs.lineHeight) || size * 1.2;
-        const lines = Math.round(n.getBoundingClientRect().height / lineH);
-        out.push({ cls: n.className.split(" ")[0], text: n.textContent.trim(), lines, size: Math.round(size) });
+        const rect = n.getBoundingClientRect();
+        const lines = Math.round(rect.height / lineH);
+        const poster = el.getBoundingClientRect();
+        const maxLines = parseInt(el.dataset.titleMaxLines || "", 10) || capMaxLines;
+        out.push({
+          cls: n.className.split(" ")[0],
+          text: n.textContent.trim(),
+          lines,
+          maxLines,
+          size: Math.round(size),
+          overflowX: n.scrollWidth > n.clientWidth + 8,
+          overflowY: n.scrollHeight > n.clientHeight + 8,
+          clipped: cs.overflow === "hidden" && (n.scrollWidth > n.clientWidth + 2 || n.scrollHeight > n.clientHeight + 2),
+          outside: rect.left < poster.left - 2 || rect.right > poster.right + 2 || rect.top < poster.top - 2 || rect.bottom > poster.bottom + 2,
+        });
       }
       return out;
-    });
+    }, cap.maxLines);
     for (const t of titles) {
       const longestLine = t.text.split(/\s+/).reduce((m, w) => Math.max(m, w.length), t.text.length);
-      if (t.lines > cap.maxLines) {
-        warns.push({ rule: "R6", msg: `.${t.cls} "${t.text}" renders ${t.lines} lines (cap ${cap.maxLines} on ${meta.board})`, fix: "switch to S01/S05 cover recipes that allow taller titles, or trim copy" });
+      if (t.outside || t.overflowX || t.clipped) {
+        fails.push({ rule: "R6", msg: `.${t.cls} "${t.text}" title box overflows/clips (x=${t.overflowX} y=${t.overflowY} clipped=${t.clipped} outside=${t.outside})`, fix: "shorten display title, lower title budget, or switch to a higher-capacity recipe" });
+      } else if (t.lines > t.maxLines) {
+        warns.push({ rule: "R6", msg: `.${t.cls} "${t.text}" renders ${t.lines} lines (cap ${t.maxLines} on ${meta.board})`, fix: "switch to S01/S05 cover recipes that allow taller titles, or trim copy" });
       } else if (longestLine > cap.maxChars + 2) {
         // soft warn only — wraps naturally
       }
