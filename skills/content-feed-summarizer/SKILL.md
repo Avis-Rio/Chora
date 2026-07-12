@@ -73,7 +73,7 @@ license: MIT
         - **禁止**频道名、播客名、作者名、水印
         - 高端杂志封面/书籍封面品质
         - 16:9 比例
-    - **命令**: `python3 generate_cover.py --regenerate-all` 可批量补生成缺失封面
+    - **命令**: `python3.10 generate_cover.py --regenerate-all` 可批量补生成缺失封面
 - **Fallback (通用)**: 若封面获取失败，自动调用 Gemini 生成备用封面。
 
 ### 步骤 3：AI 深度改写 (Streaming & 分离输出)
@@ -193,19 +193,19 @@ python3 utils/content_validator.py --report
 ### 2. 批量重写 (`batch_rewrite.py`)
 ```bash
 # 扫描并处理所有缺失 rewritten.md 的内容
-python3 batch_rewrite.py
+python3.10 batch_rewrite.py
 
 # 只处理大文件 (>40KB)
-python3 batch_rewrite.py --large-only
+python3.10 batch_rewrite.py --large-only
 
 # 预览模式（不执行）
-python3 batch_rewrite.py --dry-run
+python3.10 batch_rewrite.py --dry-run
 
 # 处理最近 7 天的新内容
-python3 batch_rewrite.py --days 7
+python3.10 batch_rewrite.py --days 7
 
 # 补 rewrite 后同时生成 Guizang 小红书分发包
-python3 batch_rewrite.py --generate-distribution
+python3.10 batch_rewrite.py --generate-distribution
 ```
 
 ### 3. 飞书同步前验证

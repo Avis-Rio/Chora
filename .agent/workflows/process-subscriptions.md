@@ -44,7 +44,7 @@ else:
 ### 2. 扫描订阅源
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 fetch_feed.py
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 fetch_feed.py
 ```
 
 ### 3. 生成待处理清单 (需要用户确认)
@@ -74,20 +74,20 @@ YouTube:
 **YouTube 视频:**
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 process_video.py "<VIDEO_URL>"
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 process_video.py "<VIDEO_URL>"
 ```
 
 **小宇宙播客:**
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 process_podcast.py "<EPISODE_URL>"
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 process_podcast.py "<EPISODE_URL>"
 ```
 
 ### 5. 更新状态（无需操作）
 
 `process_video.py` 和 `process_podcast.py` 内部在每次成功处理后会自动将 ID 追加到 `config/state.yaml` 的 `processed_ids` 列表中。
 
-> **历史说明**：早期版本曾通过 `python3 process_feed.py --update-state` 单独更新状态，
+> **历史说明**：早期版本曾通过 `python3.10 process_feed.py --update-state` 单独更新状态，
 > 但 `process_feed.py` 自 2026-07-11 起已废弃（与 `/process-subscriptions` Skill 功能完全重叠，
 > 且该命令从未实现 —— `--update-state` 参数根本不存在，文件本身还存在 Python 3.10+
 > 语法依赖）。状态更新已下沉到 `process_video.py` / `process_podcast.py` 内部，无需额外步骤。
@@ -102,7 +102,7 @@ cat config/state.yaml
 处理并更新状态完成后，将最新数据导出并同步至飞书，以便在前端展示:
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 export_to_json.py --all && python3 feishu_service.py sync
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 export_to_json.py --all && python3.10 feishu_service.py sync
 ```
 
 ## 过滤规则

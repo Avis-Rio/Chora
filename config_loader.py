@@ -67,6 +67,8 @@ def load_sources_config(path="config/sources.yaml"):
 
     # LLM (OpenAI-compatible)
     llm_cfg = config["api_keys"].get("llm", {})
+    if os.getenv("LLM_PROVIDER"):
+        llm_cfg["provider"] = os.getenv("LLM_PROVIDER")
     if os.getenv("LLM_API_KEY"):
         llm_cfg["api_key"] = os.getenv("LLM_API_KEY")
     if os.getenv("LLM_BASE_URL"):

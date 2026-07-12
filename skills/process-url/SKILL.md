@@ -34,8 +34,8 @@ license: MIT
 
 | 平台 | 命令 |
 |------|------|
-| YouTube | `python3 process_video.py "<URL>"` |
-| 小宇宙 | `python3 process_podcast.py "<URL>"` |
+| YouTube | `python3.10 process_video.py "<URL>"` |
+| 小宇宙 | `python3.10 process_podcast.py "<URL>"` |
 
 脚本内部完成完整工作流（元数据 / 封面 / 转录 / AI 改写 / 归档）。
 
@@ -52,7 +52,7 @@ license: MIT
 ### 步骤 4：同步至飞书
 
 ```bash
-python3 feishu_service.py sync
+python3.10 feishu_service.py sync
 ```
 
 > 若环境变量 `FEISHU_*` 未配置，该命令会安全跳过（不报错）。

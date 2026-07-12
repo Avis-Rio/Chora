@@ -37,7 +37,7 @@ license: MIT
 ### 步骤 1：扫描订阅源
 
 ```bash
-python3 fetch_feed.py
+python3.10 fetch_feed.py
 ```
 
 按以下规则过滤：
@@ -76,10 +76,10 @@ YouTube:
 
 ```bash
 # YouTube
-python3 process_video.py "<VIDEO_URL>"
+python3.10 process_video.py "<VIDEO_URL>"
 
 # 小宇宙
-python3 process_podcast.py "<EPISODE_URL>"
+python3.10 process_podcast.py "<EPISODE_URL>"
 ```
 
 每个项目的工作流由对应脚本负责（不重复定义）。
@@ -95,13 +95,13 @@ python3 utils/content_validator.py --fix
 ### 步骤 5：同步至飞书
 
 ```bash
-python3 feishu_service.py sync
+python3.10 feishu_service.py sync
 ```
 
 导出最新数据：
 ```bash
-python3 export_to_json.py --all
-python3 generate_frontend_data.py   # 同步 frontend/data
+python3.10 export_to_json.py --all
+python3.10 generate_frontend_data.py   # 同步 frontend/data
 ```
 
 > 若 `FEISHU_*` 环境变量未配置，sync 安全跳过。
@@ -139,4 +139,4 @@ content_archive/ → export_to_json.py → content_export.json
 
 - 批量模式**必须先列清单 + 用户确认后才开始**
 - 错误日志写 `processing_errors.log`，不阻塞流程
-- 已废弃：`python3 process_feed.py --update-state`（该命令从未实现，2026-07-11 起脚本已删除；状态更新由 process_video/podcast 内部完成）
+- 已废弃：`python3.10 process_feed.py --update-state`（该命令从未实现，2026-07-11 起脚本已删除；状态更新由 process_video/podcast 内部完成）

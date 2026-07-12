@@ -176,12 +176,58 @@ class TestMapToFields:
 
     def test_skips_internal_keys_not_in_schema(self):
         host = self._service()
-        # available_fields = {} means no internal keys map. The legacy
-        # fallback (first alias as 'text') is honoured for each key so we
-        # can at least attempt a write — useful for dry runs and dry tests.
-        out = host._map_to_fields({"title": "Hello"}, available_fields={})
-        assert "标题" in out  # first alias used as fallback name
-        assert out["标题"] == "Hello"
+        # available_fields = {} means no internal keys map. Keys with no
+        # matching alias MUST be skipped — falling back to the raw key
+        # would cause Feishu to reject the whole record with
+        # ``FieldNameNotFound`` (see regression test below).
+        out = host._map_to_fields(
+            {"title": "Hello", "cover_path": "/tmp/x.jpg"},
+            available_fields={},
+        )
+        assert out == {}
+
+    def test_skips_export_only_fields(self):
+        """Export-only fields (``cover_path``, ``folder_path``,
+        ``word_count``, ``exported_at``) must never appear on the Bitable
+        payload — they live in ``content_export.json`` for downstream
+        consumers but Feishu has no column for them.
+        """
+        host = self._service()
+        live_schema = {
+            "标题": "text",
+            "正文": "text",
+            "标签": "multi_select",
+            "平台": "text",
+            "封面": "attachment",
+        }
+        out = host._map_to_fields(
+            {
+                "title": "Hello",
+                "rewritten": "body",
+                "tags": ["A", "B"],
+                "platform": "xiaoyuzhou",
+                # Export-only noise — must be filtered:
+                "cover_path": "/tmp/cover.jpg",
+                "folder_path": "content_archive/x/y/",
+                "word_count": 4193,
+                "exported_at": "2026-07-12T19:26:46",
+                "summary": "## short summary",
+                "book_list": "| book | author |",
+            },
+            available_fields=live_schema,
+        )
+        # All legitimate fields land on the payload…
+        assert set(out.keys()) == {"标题", "正文", "标签", "平台"}
+        # …and none of the export-only fields leak through.
+        for forbidden in (
+            "cover_path",
+            "folder_path",
+            "word_count",
+            "exported_at",
+            "summary",
+            "book_list",
+        ):
+            assert forbidden not in out, f"{forbidden!r} leaked into payload: {out}"
 
     def test_uses_resolved_field_name_when_present(self):
         host = self._service()

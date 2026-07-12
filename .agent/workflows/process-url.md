@@ -28,13 +28,13 @@ description: 处理单个 YouTube 视频或小宇宙播客 URL
 **如果是 YouTube 视频:**
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 process_video.py "<URL>"
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 process_video.py "<URL>"
 ```
 
 **如果是小宇宙播客:**
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 process_podcast.py "<URL>"
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 process_podcast.py "<URL>"
 ```
 
 ### 3. 处理流程 (自动执行，无需确认)
@@ -60,7 +60,7 @@ cd /Users/Avis/Vibe_Coding/Chora && python3 process_podcast.py "<URL>"
 处理完成后，将最新数据导出并同步至飞书，以便在前端展示:
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 export_to_json.py --all && python3 feishu_service.py sync
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 export_to_json.py --all && python3.10 feishu_service.py sync
 ```
 
 ## 注意事项

@@ -18,7 +18,7 @@ description: 为所有缺少封面的小宇宙播客批量生成封面图
 ### 1. 执行批量封面生成
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 generate_cover.py --regenerate-all
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 generate_cover.py --regenerate-all
 ```
 
 ### 2. 封面风格

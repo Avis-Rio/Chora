@@ -109,7 +109,11 @@ def rewrite_content(transcript_path, metadata_path, output_path):
     provider = llm_config.get("provider", "third_party")
     base_url = llm_config["base_url"]
 
-    if provider == "openai_compatible":
+    # 智能识别: base_url 已含 /chat/completions → 自动按 OpenAI 兼容处理,
+    # 即使 provider=sources.yaml 仍标 "third_party" 也能跑通 (修复实测暴露的 404 bug)
+    is_openai_compatible = provider == "openai_compatible" or "/chat/completions" in base_url
+
+    if is_openai_compatible:
         url = base_url
         payload = {
             "model": llm_config["model"],

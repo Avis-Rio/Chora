@@ -34,13 +34,13 @@ description: 导出归档内容并同步到飞书多维表格
 ### 1. 导出内容到 JSON
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 export_to_json.py --all
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 export_to_json.py --all
 ```
 
 ### 2. 智能同步到飞书
 // turbo
 ```bash
-cd /Users/Avis/Vibe_Coding/Chora && python3 feishu_service.py sync
+cd /Users/Avis/Vibe_Coding/Chora && python3.10 feishu_service.py sync
 ```
 
 ## 智能同步逻辑
@@ -70,13 +70,13 @@ cd /Users/Avis/Vibe_Coding/Chora && python3 feishu_service.py sync
 
 ### 检查记录完整性
 ```bash
-python3 feishu_service.py check
+python3.10 feishu_service.py check
 ```
 显示每条记录的完整性状态和缺失字段。
 
 ### 强制更新所有记录
 ```bash
-python3 feishu_service.py sync --force
+python3.10 feishu_service.py sync --force
 ```
 忽略完整性检查，强制更新所有记录（包括重新上传封面）。
 

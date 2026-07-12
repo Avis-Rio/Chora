@@ -2,7 +2,16 @@
 
 > 本文件定义三个 Skill 的职责矩阵、调用关系、共同遵守的契约。后续 Skill 调整必须先看这里。
 >
-> 上次更新：2026-07-11（随项目现状报告一同整理）
+> 上次更新：2026-07-12（实测暴露后修订：Python 版本要求 + base_url 智能识别 + FieldNameNotFound 防回归）
+
+## 0. 运行时要求（**必读**）
+
+| 要求 | 说明 |
+|---|---|
+| **Python ≥ 3.10** | `distribution_pipeline/*` 全包使用 PEP 604 union syntax（如 `Path \| None`），Python 3.9 在 import 阶段立即崩溃。所有 SKILL 命令已统一为 `python3.10 ...` |
+| **macOS 默认 python3 = 3.9** | 实测 2026-07-12：macOS 系统默认 `python3` 仍指向 3.9，跑任何 SKILL 都会因 `distribution_pipeline.automation` import 失败而退出 |
+| **CI 矩阵已验证** | 3.10 / 3.11 / 3.12 三个版本在 GitHub Actions 全绿（run #14+），实测证明 |
+| **本地推荐** | `brew install python@3.11` → `python3.10` / `python3.11` / `python3.12` 任选一个 |
 
 ## 1. 三个 Skill 的职责矩阵
 
@@ -77,7 +86,7 @@ process_video.py process_podcast.py   fetch_feed.py  process_   feishu_service
 
 处理完成后**自动**触发：
 ```bash
-python3 feishu_service.py sync
+python3.10 feishu_service.py sync
 ```
 若环境变量 `FEISHU_*` 未配置，则跳过（不报错）。
 

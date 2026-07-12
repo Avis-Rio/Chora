@@ -172,11 +172,13 @@ class FieldMixin:
                 continue
             field_name, field_type = self._resolve_field_name(internal_key, available_fields)
             if not field_name:
-                # If no schema metadata, fall back to the first alias so the
-                # caller can still attempt a write (useful for dry runs/tests).
-                aliases = self.field_aliases.get(internal_key, [internal_key])
-                field_name = aliases[0]
-                field_type = "text"
+                # Skip keys with no matching alias in the live schema. This
+                # filters out export-only fields (``cover_path``,
+                # ``folder_path``, ``word_count``, ``exported_at``, …) that
+                # never belong on the Bitable payload. Falling back to the
+                # raw key caused Feishu to reject the whole record with
+                # ``FieldNameNotFound``.
+                continue
 
             # Cover gets replaced by file_token only when caller explicitly
             # provides one — otherwise we pass the raw ``cover_path`` value.
