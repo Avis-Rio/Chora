@@ -52,11 +52,31 @@ jobs:
           GEMINI_API_KEY: ci-stub
           LLM_API_KEY: ci-stub
         run: |
-          set +e  # don't exit on first failing step; want full traceback
+          set +e  # keep going through pytest to surface full traceback
+          echo "::group::Python + pip versions"
+          python --version
+          pip --version
+          echo "::endgroup::"
+
+          echo "::group::pytest version + collection"
           python -m pytest --version
-          python -m pytest tests/distribution_pipeline --tb=long --showlocals 2>&1 | tail -200
-          exit_status=${PIPESTATUS[0]}
-          exit $exit_status
+          python -m pytest tests/distribution_pipeline --collect-only 2>&1 | tail -120
+          echo "::endgroup::"
+
+          echo "::group::full pytest run"
+          python -m pytest tests/distribution_pipeline --tb=long --showlocals \
+            2>&1 | tee /tmp/pytest_output.txt | tail -250
+          rc=${PIPESTATUS[0]}
+          echo "::endgroup::"
+          exit $rc
+
+      - name: Upload pytest log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-log-${{ matrix.python-version }}
+          path: /tmp/pytest_output.txt
+          retention-days: 7
 
   lint-skill-md:
     name: Validate SKILL.md front matter
