@@ -36,37 +36,41 @@ class RecordMixin:
         return None
 
     def create_record(self, data, available_fields=None, file_token=None):
-        """Create a new record."""
+        """Create a new record. Returns the record_id on success, ``None`` on failure."""
         url = f"{self._base_url()}/records"
-        # Real implementation lives in ``_map_to_fields`` (FieldMixin) to keep
-        # all alias-resolution + value-formatting logic in one place. We
-        # delegate here so callers can pass arbitrary ``data`` dicts.
-        return self._write_record('POST', url, data, available_fields, file_token)
-
-    def update_record(self, record_id, data, available_fields=None, file_token=None):
-        """Update an existing record."""
-        url = f"{self._base_url()}/records/{record_id}"
-        return self._write_record('PUT', url, data, available_fields, file_token)
-
-    def _write_record(self, method, url, data, available_fields, file_token):
-        """Shared create/update wrapper that maps internal keys → Feishu."""
-        if available_fields is None:
-            available_fields = self.get_table_fields()
         mapped = self._map_to_fields(data, available_fields, file_token)
-        if not mapped:
-            print(f"   ⚠️  No fields could be mapped; skipping write")
-            return None
+        payload = {"fields": mapped}
         try:
-            response = self._request(method, url, headers=self._headers(), json=mapped)
+            response = self._request("POST", url, headers=self._headers(), json=payload)
             result = response.json()
             if result.get('code') == 0:
-                return result.get('data', {}).get('record', {})
+                record_id = result.get('data', {}).get('record', {}).get('record_id')
+                print(f"✅ Created record: {data.get('title', 'Unknown')[:30]}...")
+                return record_id
             else:
-                print(f"   ❌ Write failed: {result.get('msg', 'Unknown')}")
+                print(f"❌ Failed to create record: {result.get('msg', 'Unknown error')}")
                 return None
-        except Exception as exc:
-            print(f"   ❌ Write exception: {exc}")
+        except Exception as e:
+            print(f"❌ Error creating record: {e}")
             return None
+
+    def update_record(self, record_id, data, available_fields=None, file_token=None):
+        """Update an existing record. Returns ``True`` on success, ``False`` on failure."""
+        url = f"{self._base_url()}/records/{record_id}"
+        mapped = self._map_to_fields(data, available_fields, file_token)
+        payload = {"fields": mapped}
+        try:
+            response = self._request("PUT", url, headers=self._headers(), json=payload)
+            result = response.json()
+            if result.get('code') == 0:
+                print(f"✅ Updated record: {data.get('title', 'Unknown')[:30]}...")
+                return True
+            else:
+                print(f"❌ Failed to update record: {result.get('msg', 'Unknown error')}")
+                return False
+        except Exception as e:
+            print(f"❌ Error updating record: {e}")
+            return False
 
     def get_table_fields(self):
         """Get the live table schema — list of field definitions."""

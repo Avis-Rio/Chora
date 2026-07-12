@@ -1,4 +1,21 @@
-"""High-level orchestration: completeness check + sync_from_export."""
+"""High-level orchestration: completeness check + sync_from_export.
+
+Implements the **same behaviour** as the legacy monolithic
+``feishu_service.FeishuService.sync_from_export`` method, but on
+top of the mixin decomposition.
+
+Key behaviour preserved:
+
+* Platform normalisation (e.g. ``youtube`` → ``YouTube``,
+  ``xiaoyuzhou`` → ``小宇宙``) is applied inside :meth:`_map_to_fields`
+  in :mod:`feishu._fields`, then we call that here.
+* Existing cover file_tokens are reused — only the **missing** or
+  force-updated covers are uploaded to Drive.
+* Updates preserve the existing ``published`` flag by default.
+* :data:`REQUIRED_FIELDS` matches the legacy list (``title``,
+  ``rewritten``, ``cover``, ``tags``, ``publish_date``, ``id``,
+  ``quotes``).
+"""
 
 import os
 import json
@@ -9,113 +26,148 @@ from datetime import datetime
 class SyncMixin:
     """is_record_complete + sync_from_export (the only public orchestration API)."""
 
-    REQUIRED_KEYS = ('title', 'rewritten', 'source_url')
+    # Key fields that must have data for a record to be considered complete.
+    # These are internal keys; they are resolved to actual Feishu field names
+    # via field_aliases when checking completeness.
+    REQUIRED_FIELDS = ['title', 'rewritten', 'cover', 'tags', 'publish_date', 'id', 'quotes']
 
     def is_record_complete(self, record):
-        """Return (is_complete, missing_field_names)."""
+        """Check if a record has all required fields filled.
+
+        Uses field aliases to tolerate schema renames.
+        Returns tuple: (is_complete, missing_fields)
+        """
         fields = record.get('fields', {})
         missing = []
-        for internal_key in self.REQUIRED_KEYS:
-            resolved_name, _ = self._resolve_field_name(internal_key, {'placeholder': 'text'})
-            # When the table has no placeholder column, fall back to known names.
-            if not resolved_name:
-                # Best-effort: try the first alias for each key directly.
-                first_alias = self.field_aliases.get(internal_key, [internal_key])[0]
-                resolved_name = first_alias
-            if not fields.get(resolved_name):
-                missing.append(internal_key)
-        return (len(missing) == 0), missing
+
+        available_fields = self.get_table_fields()
+
+        for internal_key in self.REQUIRED_FIELDS:
+            field_name = self._resolve_field_name(internal_key, available_fields)[0]
+            if not field_name:
+                # Cannot resolve field; assume schema missing this concept
+                continue
+            value = fields.get(field_name)
+
+            # Check if field is empty (None / blank string / empty list).
+            if value is None:
+                missing.append(field_name)
+            elif isinstance(value, str) and not value.strip():
+                missing.append(field_name)
+            elif isinstance(value, list) and len(value) == 0:
+                missing.append(field_name)
+
+        return (len(missing) == 0, missing)
 
     def sync_from_export(self, export_path='content_export.json', force=False):
-        """Sync content_export.json records to the Bitable.
+        """Sync all content from export JSON to Feishu.
+
+        Intelligent sync logic:
+        - Complete records: Skip (unless force=True)
+        - Incomplete records: Update to fill missing fields
+        - New records: Create with all data
 
         Args:
-            export_path: path to the JSON export (default content_export.json).
-            force: when True, update even complete records.
+            export_path: Path to exported JSON file
+            force: If True, update all records regardless of completeness
         """
         if not os.path.exists(export_path):
             print(f"❌ Export file not found: {export_path}")
             return
 
         with open(export_path, 'r', encoding='utf-8') as f:
-            export_data = json.load(f)
+            items = json.load(f)
 
-        if not isinstance(export_data, list):
-            print("❌ Export file should be a list of records")
-            return
-
-        print(f"📦 Loaded {len(export_data)} records from {export_path}")
-
-        # Discover live schema once.
+        # Get available fields from the table
+        print("🔍 Checking table fields...")
         available_fields = self.get_table_fields()
-        if not available_fields:
-            print("⚠️  Could not load live schema; writing will likely fail.")
+        if available_fields:
+            print(f"   Found fields: {', '.join(available_fields.keys())}")
+        else:
+            print("   ⚠️ Could not get field list, will try all fields")
 
-        # Pre-fetch existing records for idempotent upsert.
-        existing_by_id = {}
-        for record in self.list_records(page_size=500):
-            fields = record.get('fields', {})
-            _, id_alias = self._resolve_field_name('id', available_fields)
-            id_key = id_alias or '记录ID'
-            cid = fields.get(id_key)
-            if cid:
-                existing_by_id[cid] = record
+        # Check if cover field exists
+        cover_field = self._resolve_field_name('cover', available_fields)[0]
+        has_cover_field = bool(cover_field)
+
+        # Pre-fetch all records for efficiency
+        print("📥 Fetching existing records...")
+        all_records = self.list_records(page_size=500)
+        records_by_id = {}
+        id_field = self._resolve_field_name('id', available_fields)[0] or '记录ID'
+        for record in all_records:
+            content_id = record.get('fields', {}).get(id_field)
+            if content_id:
+                records_by_id[content_id] = record
+        print(f"   Found {len(records_by_id)} existing records")
+
+        print(f"\n📦 Processing {len(items)} items...")
 
         created = 0
         updated = 0
         skipped = 0
         failed = 0
 
-        for entry in export_data:
-            title = entry.get('title', '<no title>')[:35]
+        for item in items:
+            content_id = item.get('id')
+            title = item.get('title', 'Unknown')[:35]
+
             try:
-                # Translate internal keys to Feishu columns and format values.
-                record_payload = {
-                    'id': entry.get('id'),
-                    'title': entry.get('title'),
-                    'channel': entry.get('channel'),
-                    'rewritten': entry.get('rewritten') or entry.get('summary'),
-                    'guests': entry.get('guests'),
-                    'quotes': entry.get('quotes'),
-                    'transcript': entry.get('transcript'),
-                    'reading_time': entry.get('reading_time'),
-                    'score': entry.get('score'),
-                    'source_url': entry.get('source_url'),
-                    'publish_date': entry.get('publish_date'),
-                    'platform': entry.get('platform'),
-                    'tags': entry.get('tags'),
-                    'cover': entry.get('cover_path'),
-                    'published': entry.get('published', True),
-                }
-                # Trim empty values to avoid junk keys.
-                record_payload = {k: v for k, v in record_payload.items() if v not in (None, '', [])}
+                existing = records_by_id.get(content_id)
 
-                cover_path = entry.get('cover_path')
-                file_token = None
-                if cover_path and os.path.exists(cover_path):
-                    file_token = self.upload_image(cover_path)
+                if existing:
+                    # Check if record is complete
+                    is_complete, missing_fields = self.is_record_complete(existing)
 
-                existing = existing_by_id.get(entry.get('id'))
-                if existing and not force:
-                    is_complete, missing = self.is_record_complete(existing)
-                    if is_complete:
-                        print(f"   ⏭️  Skipping (complete): {title}")
+                    if is_complete and not force:
+                        # Record is complete, skip
+                        print(f"⏭️  Skip (complete): {title}...")
                         skipped += 1
                         continue
+
+                    # Record is incomplete or force update
+                    if missing_fields:
+                        print(f"\n🔧 Updating (missing: {', '.join(missing_fields)}): {title}...")
+                    else:
+                        print(f"\n🔄 Force update: {title}...")
+
+                    # Upload cover if missing or force-update. Otherwise reuse
+                    # the existing file_token so we don't upload the same image twice.
+                    file_token = None
+                    cover_path = item.get('cover_path')
+                    needs_cover = (cover_field in missing_fields) or force
+
+                    if cover_path and os.path.exists(cover_path) and has_cover_field and needs_cover:
+                        file_token = self.upload_image(cover_path)
+                    elif not needs_cover and cover_field and cover_field in existing.get('fields', {}):
+                        cover_obj = existing['fields'][cover_field]
+                        if cover_obj and isinstance(cover_obj, list) and len(cover_obj) > 0:
+                            file_token = cover_obj[0].get('file_token')
+
+                    # Preserve existing publish status; default True for new records.
+                    published_field = self._resolve_field_name('published', available_fields)[0]
+                    if published_field and published_field in existing.get('fields', {}):
+                        item['published'] = existing['fields'][published_field]
+
                     record_id = existing.get('record_id')
-                    result = self.update_record(record_id, record_payload, available_fields, file_token)
-                    if result:
+                    if self.update_record(record_id, item, available_fields, file_token):
                         updated += 1
-                        print(f"   🔧 Updated: {title}")
                     else:
                         failed += 1
                 else:
-                    result = self.create_record(record_payload, available_fields, file_token)
-                    if result:
+                    # New record — create with all data
+                    print(f"\n➕ Creating: {title}...")
+
+                    file_token = None
+                    cover_path = item.get('cover_path')
+                    if cover_path and os.path.exists(cover_path) and has_cover_field:
+                        file_token = self.upload_image(cover_path)
+
+                    if self.create_record(item, available_fields, file_token):
                         created += 1
-                        print(f"   ➕ Created: {title}")
                     else:
                         failed += 1
+
             except Exception as e:
                 print(f"❌ Error processing {title}: {e}")
                 failed += 1

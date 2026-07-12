@@ -134,6 +134,11 @@ class FieldMixin:
     def _map_to_fields(self, data, available_fields=None, file_token=None):
         """Map internal-keyed data dict to Feishu field name + format.
 
+        Also applies a small ``platform`` normalisation table so callers can
+        pass the lowercase internal platform identifier (``youtube``,
+        ``xiaoyuzhou``) and have it stored as the human-readable label
+        (``YouTube``, ``小宇宙``) the operator expects in the Bitable.
+
         Args:
             data: dict with internal keys (``title``, ``rewritten``, ...).
             available_fields: live schema dict (name -> internal_type) or None.
@@ -146,20 +151,33 @@ class FieldMixin:
         if available_fields is None:
             available_fields = self.get_table_fields()
 
+        # Local copy so we never mutate caller's dict.
+        candidates = dict(data)
+
+        # Platform name mapping: lowercase internal → displayed label.
+        platform_map = {'youtube': 'YouTube', 'xiaoyuzhou': '小宇宙'}
+        if candidates.get('platform'):
+            candidates['platform'] = platform_map.get(candidates['platform'], candidates['platform'])
+
         mapped = {}
-        for internal_key, value in data.items():
-            resolved_name, field_type = self._resolve_field_name(internal_key, available_fields)
-            if not resolved_name:
-                # Field not in schema — skip silently.
+        for internal_key, raw_value in candidates.items():
+            if raw_value is None or raw_value == '':
                 continue
+            field_name, field_type = self._resolve_field_name(internal_key, available_fields)
+            if not field_name:
+                # If no schema metadata, fall back to the first alias so the
+                # caller can still attempt a write (useful for dry runs/tests).
+                aliases = self.field_aliases.get(internal_key, [internal_key])
+                field_name = aliases[0]
+                field_type = 'text'
 
+            # Cover gets replaced by file_token only when caller explicitly
+            # provides one — otherwise we pass the raw ``cover_path`` value.
             if internal_key == 'cover' and file_token:
-                value = file_token
+                raw_value = file_token
 
-            formatted = self._format_field_value(value, field_type)
-            if formatted is None:
-                continue
-
-            mapped[resolved_name] = formatted
+            formatted = self._format_field_value(raw_value, field_type)
+            if formatted is not None:
+                mapped[field_name] = formatted
 
         return mapped
