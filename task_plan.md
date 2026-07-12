@@ -26,6 +26,9 @@
 | P2.3 | complete | 修复 Token 导出视觉回退：禁用假 SVG、收紧 Swiss 配方门槛、重跑目检 |
 | P2.4 | complete | Guizang 上游接入 P0：修复 PNG/QA 闭环、补 Node 依赖入口、同步接入文档 |
 | P2.5 | complete | Guizang 后续优化：xhs-06/xhs-07 R5 密度（2 warn → 1 warn）、S13 Map · Route、WeChat Swiss 渲染、360px 缩略图检查 |
+| P3.0 | complete | L1 紧急修复（数据兜底）+ L2 Skill 编排核心（ARCHITECTURE.md + 删 process_feed + 重写薄入口 SKILL）+ L3 冗余清理 + L4 工程质量（CI + pyproject + AGENTS 删除）+ L5 长期完善 |
+| P3.1 | complete | 飞书同步链路 4 bug 修复：B1 缺字段、B2 不自动勾选、B3 fallback 不同步、B4 type 7↔17 互换 |
+| P3.2 | pending | sync_covers.py 自动化：让 process-podcast 跑完自动 cp 封面到 `frontend/covers/` + git add，避免下次还得手动 |
 
 ## 决策
 

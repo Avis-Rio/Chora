@@ -2,7 +2,7 @@
 
 > 本文件定义三个 Skill 的职责矩阵、调用关系、共同遵守的契约。后续 Skill 调整必须先看这里。
 >
-> 上次更新：2026-07-12（实测暴露后修订：Python 版本要求 + base_url 智能识别 + FieldNameNotFound 防回归）
+> 上次更新：2026-07-12 21:30（feishu sync 自动行为 + Bitable type mapping 修复 + 封面双轨制说明）
 
 ## 0. 运行时要求（**必读**）
 
@@ -90,6 +90,35 @@ python3.10 feishu_service.py sync
 ```
 若环境变量 `FEISHU_*` 未配置，则跳过（不报错）。
 
+#### 3.4.1 自动行为（2026-07-12 起）
+
+`feishu/_sync.py:sync_from_export` 在 sync 过程中自动执行：
+
+| 行为 | 默认 | Env Override |
+|---|---|---|
+| 新建飞书记录时**自动勾选发布** (`item["published"]=True`) | ✅ | `CHORA_FEISHU_AUTO_PUBLISH=false` |
+| Sync 完成后**自动重生成** `frontend/data/*.json` fallback | ✅ | `CHORA_FEISHU_REGENERATE_FRONTEND=false` |
+
+操作员 per-record override：上游设 `item["published"]=False` 不被自动勾选覆盖。
+
+#### 3.4.2 Bitable type mapping（**关键**，影响 attachment 写入）
+
+`feishu/_records.py:_feishu_type_to_internal` 把飞书 Bitable numeric type IDs 翻译成内部类型名：
+
+| ID | 内部类型 | 用途 |
+|---|---|---|
+| 1 | text | 标题、嘉宾等 |
+| 2 | number | 阅读时长、评分 |
+| 3 | single_select | 平台 |
+| 4 | multi_select | 标签 |
+| 5 | date | 发布时间 |
+| **7** | **attachment** | **封面**、音频等 |
+| 11 | user | 用户字段 |
+| 15 | url | 原始链接 |
+| 17 | checkbox | **是否发布** |
+
+⚠️ 历史 bug：曾把 7↔17 互换，导致封面 file_token 被当 checkbox 写入 → `AttachFieldConvFail` → cover 静默丢失。修复见 commit `045eb9e`。
+
 ### 3.5 数据流向（**不**在 SKILL 控制内，由 Python 脚本管理）
 
 ```
@@ -102,15 +131,35 @@ content_archive/{date}/{folder}/
 
             ↓ export_to_json.py
             ↓
-content_export.json (44 条)
+content_export.json (45 条)
             ↓ generate_frontend_data.py
             ↓
 frontend/data/content.json + frontend/public/data/content.json
 frontend/data/summary.json + frontend/public/data/summary.json
-            ↓ feishu_service.py sync
+            ↓ sync_from_export 末尾自动调  ← 2026-07-12 新增
+            ↓
+(本地 fallback 与飞书表保持同步)
             ↓
 飞书多维表格（生产环境）
+            ↓
+前端 /api/content 拉取 + /api/image 代理封面
+            ↓
+Chora 前端显示
 ```
+
+#### 3.5.1 封面图双轨制
+
+封面图通过**两条独立路径**服务，互不依赖：
+
+1. **飞书主路径**（API 正常时）：
+   `cover.jpg` → `feishu_service.upload_image()` → 飞书 cover field → `/api/image?token=xxx` 代理流回
+
+2. **本地 fallback 路径**（API 失败时）：
+   `cover.jpg` → 手动 `cp frontend/covers/{safe_name}.{ext}` + commit → `generate_frontend_data.py` 写入 `cover_url` → 浏览器直接读 `/covers/{safe_name}.{ext}`
+
+**同步要求**：每次新增文章必须同时：
+- ✅ `feishu_service.py sync` 自动写飞书 cover（成功后 file_token 立即可用）
+- ⚠️ **手动** 复制 `cover.jpg` → `frontend/covers/{safe_name}.{ext}` 并 commit（否则 fallback 路径不可用）
 
 ---
 
@@ -155,7 +204,7 @@ frontend/data/summary.json + frontend/public/data/summary.json
 | `process_video.py` | process-url / process-subscriptions | ✅ | 单 YouTube 视频 |
 | `process_podcast.py` | process-url / process-subscriptions | ✅ | 单小宇宙播客 |
 | `fetch_feed.py` | process-subscriptions | ✅ | 订阅源扫描 |
-| `feishu_service.py` | 两个入口 SKILL 步骤 5 | ✅ | 飞书多维表格同步 |
+| `feishu_service.py` | 两个入口 SKILL 步骤 5 | ✅ | 飞书多维表格同步（已拆为 `feishu/` 包：`_auth` / `_client` / `_fields` / `_records` / `_uploads` / `_sync`） |
 | `utils/content_validator.py` | process-subscriptions 步骤 4 | ✅ | 完整性检查 |
 | `batch_rewrite.py` | (无 SKILL) | ✅ | 批量补改写 |
 | `generate_cover.py` | (隐式) | ✅ | 封面生成 |
@@ -206,9 +255,16 @@ frontend/data/summary.json + frontend/public/data/summary.json
 3. 不需要修改入口 SKILL
 
 ### 调整飞书字段
-1. 改 `feishu_service.py` 的 `FIELD_ALIASES`
-2. 改 `feishu.yaml` 配置
-3. 不需要修改 SKILL
+1. 改 `feishu/_fields.py:DEFAULT_FIELD_ALIASES`（这是新权威）
+2. 同步 `frontend/api/content.js:FIELD_ALIASES`（API 层 alias）
+3. 改 `feishu.yaml` 配置
+4. 更新 `config/feishu-setup.md`（推荐字段表）
+5. 不需要修改 SKILL
+
+### 修复 Bitable type 错配
+1. 改 `feishu/_records.py:_feishu_type_to_internal` 的 mapping 表
+2. 添加 string alias 表（飞书某些 endpoint 返回 `"Attachment"` 字符串）
+3. 在 commit message 写明 type ID 与官方文档对齐
 
 ---
 
@@ -217,3 +273,5 @@ frontend/data/summary.json + frontend/public/data/summary.json
 | 版本 | 日期 | 主要变更 |
 |---|---|---|
 | 1.0 | 2026-07-11 | 初版，建立职责矩阵 + 契约 + 废弃清单 |
+| 1.1 | 2026-07-12 上午 | Python 版本要求 + base_url 智能识别 + FieldNameNotFound 防回归 |
+| 1.2 | 2026-07-12 下午 | auto-publish 默认 + frontend refresh 自动 + Bitable type 修复 + 封面双轨制说明 |

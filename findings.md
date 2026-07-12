@@ -67,3 +67,68 @@
 - AI fallback 语义漂移已修复：`materialize_image_assets()` 可接收 category/theme，Guizang renderer 传入实际品类与 resolved theme；candidates/download 模式不再总是走通用 prompt。
 - R5 密度优化需谨慎：上调 S12 3-cell 高度到 260px 会让 xhs-06 产生 R1 overflow（scrollH 1539 > clientH 1440）；最终保留 3-cell 220px、4-cell 300px，Token R5 从 5 warn 降到 2 warn 且 0 fail。
 - 全量 distribution_pipeline 测试暴露 Pexels 候选解析缺口：mock / API 可只返回 `src.large`，原实现只读 `medium/small/large2x`，导致 Pexels 候选被过滤；已补 `large` fallback。
+
+## 2026-07-12 process-url 实测暴露的飞书同步链路 bug
+
+### B1 飞书 schema 缺「是否发布」字段
+
+- 现象：用户新建飞书表 → 没有「是否发布」复选框 → `/api/content` 过滤 `isPublished === true` 永远取不到 `undefined` → 文章**永不显示**
+- 修复：`config/feishu-setup.md` 加入该字段推荐
+- 教训：所有 schema 变更必须**同时**更新 `feishu-setup.md` / `_fields.py:DEFAULT_FIELD_ALIASES` / `frontend/api/content.js:FIELD_ALIASES`
+
+### B2 新建飞书记录不自动勾选发布
+
+- 现象：表里有字段，但新文章默认 `published=False`
+- 修复：`sync_from_export` 在 `create_record` 前注入 `item["published"]=True`
+- 设计要点：
+  - 默认开启（用户期望"即创即显"）
+  - env override `CHORA_FEISHU_AUTO_PUBLISH=false` 可关
+  - per-record override 永远不被覆盖（`if "published" not in item`）
+- 防回归：3 个新单测
+
+### B3 本地 fallback JSON 不同步
+
+- 现象：`frontend/data/content.json` 与飞书表脱节；API 抖动时显示陈旧数据
+- 修复：`sync_from_export` 末尾自动调 `generate_frontend_data.py`（subprocess.run，失败仅 print 不抛异常）
+- 设计要点：
+  - 仅在 `(created + updated) > 0` 时触发（避免 0 改动也跑）
+  - env override `CHORA_FEISHU_REGENERATE_FRONTEND=false` 可关（CI 场景）
+- 防回归：2 个新单测
+
+### B4 Bitable type 7↔17 互换（最阴险）
+
+- 现象：`_feishu_type_to_internal` 把 `7→checkbox` / `11→attachment`
+- 影响链：
+  1. `get_table_fields()` 把"封面"字段报为 `text`
+  2. `_map_to_fields` 走 text formatter → 返回字符串 `str(file_token)`
+  3. 飞书 API 收到 `{"封面": "EX00xxxx..."}` 而不是 `[{file_token}]`
+  4. 飞书返回 `code=1254069, msg=AttachFieldConvFail`
+  5. `update_record` 失败但日志只说"create failed"——根因被埋
+- 修复：交换 7↔17 + 加 string alias 表
+- 教训：**type ID 是 Bitable 不可绕过的契约**，错了静默丢失 attachment 而不报错
+- 历史数据恢复：045 这条记录 out-of-band raw PUT 修复
+
+### CI 调试经验（避坑）
+
+- `set +e` + `head -c 4500` 截断 stdout 看似"节省日志"，实际：
+  - 截断后 pytest exit code 是 head 的，不是 pytest 的
+  - traceback 被 head 吃掉，看不到真实错误
+  - 在 ubuntu runner 上行为与 macOS 不一致
+- 简化 ci.yml 为 `python -m pytest ... -q --tb=short` + artifact 上传完整 stdout/stderr，是最稳的 CI 写法
+
+### Vercel 部署根 = frontend/
+
+- DEPLOY.md 第 35 行明确 "Root Directory: frontend"
+- Vercel 静态文件路径以 `frontend/` 为根
+- 仓库根下的同名目录（`covers/`、`content.json`）Vercel 看不到
+- 前端 `<img src="/covers/xxx.jpg">` → 部署后对应 `frontend/covers/xxx.jpg`
+- 含义：**所有"在仓库根 covers/ 下加文件"的操作对线上无效**，必须放到 `frontend/covers/`
+
+### 封面图双轨制
+
+| 路径 | 服务方式 | 自动同步？ |
+|---|---|---|
+| 飞书 cover field | `/api/image?token=xxx` 代理 | ✅ `sync_from_export` 自动 |
+| `frontend/covers/{safe_name}.jpg` | 直接静态托管 | ❌ 需手动 cp + commit |
+
+未来改进方向：让 `process-podcast.py` 跑完自动调 `sync_covers.py`（已在 #7 follow-up 列表）。

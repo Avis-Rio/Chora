@@ -27,7 +27,7 @@
 - P2.2 已完成：真实 Token 夹具导出 10 张 PNG，全部 `1080x1440`；manifest 记录 Guizang validator `pass`，`10 clean · 0 fails · 0 warns`。
 - 完成前最终验证已通过：全量 `py_compile`、关键逻辑直跑断言、PNG 尺寸检查、独立 Guizang validator 复跑均为通过。
 - P2.3 视觉回退修复进行中：`image_assets=plan` 不再生成 `chora-generated` CSS/SVG 概念假图。
-- P2.3 视觉回退修复进行中：Swiss planner 不再“有图即 S04”；S09 KPI Tower 需要至少 2 个真实数字；单指标洞察回落 S03 File Card。
+- P2.3 视觉回退修复进行中：Swiss planner 不再"有图即 S04"；S09 KPI Tower 需要至少 2 个真实数字；单指标洞察回落 S03 File Card。
 - P2.3 视觉回退修复进行中：S06 Pipeline 必须有 3 个以上流程/枚举节点；中文枚举会拆成独立结构节点以填满版面。
 - P2.3 已验证：`pytest tests/distribution_pipeline/test_image_assets.py tests/distribution_pipeline/test_guizang_page_planner.py tests/distribution_pipeline/test_guizang_title_breaker.py`，47 passed。
 - P2.3 已验证：Token HTML 包生成成功，`selected_assets=[]`，无 `chora-generated/generated_svg/evidence.svg` 入版；静态 Guizang QA 5 pass、0 fail。
@@ -84,3 +84,82 @@
 - 最终回归：`/Library/Frameworks/Python.framework/Versions/3.10/bin/python3 -m pytest tests/distribution_pipeline -q`，327 passed。
 - 最终编译：`python3 -m py_compile` 通过。
 - `git diff --check` 通过。
+
+## 2026-07-12
+
+> 本轮：完成 2026-07-11 状态报告后的"必做 + 应该做 + 可选"清单收尾，并把实测暴露的飞书同步链路 4 个 bug 一并修复。详细见 `docs/reports/2026-07-12-feishu-fixes.md`。
+
+### L1 紧急修复（数据兜底）
+
+- `content_export.json` 同步到 45 条（与 `frontend/data/content.json`、`frontend/public/data/content.json` 一致）
+- summary.json 脏标签从 11 → 0（`_dedupe_tags` 函数实现大小写不敏感去重）
+- `covers/default.jpg` 兜底图（1600×900 / 46.8 KB / JPEG）已生成
+
+### L2 Skill 编排核心
+
+- 新建 `skills/ARCHITECTURE.md`（211 行）作为编排权威
+- 删除 `process_feed.py`（与 process-subscriptions Skill 重叠 + Python 3.9 不可用 + `--update-state` 永远不存在）
+- 重写 `process-url` 与 `process-subscriptions` SKILL.md（薄入口，不再重复工作流）
+
+### L3 代码冗余清理
+
+- 删除 4 个一次性脚本：`clean_tags.py` / `inspect_page.py` / `batch_process.py` / `process_feed.py`
+- 删除 `frontend/src/{app,components}/` 空目录
+- 删除根目录 3 个调试文件（`page.html` ×2、`test_audio.m4a`）
+- 补 `.gitignore`：`.pytest_cache/`、`*.m4a`、`debug_*.html`、`scratch_*.py`
+
+### L4 工程质量
+
+- 新增 `.github/workflows/ci.yml`（Python 3.10/3.11/3.12 矩阵 + SKILL frontmatter lint）
+- 新增 `pyproject.toml` 项目级 pytest 配置
+- 删除过期的 `AGENTS.md`（与 CLAUDE.md 重复）
+- 修复 `docs/distribution-pipeline.md` 2 处过时引用
+
+### L5 长期完善 + 真实端到端实测
+
+- 真实跑 `process-url` 处理 https://www.xiaoyuzhoufm.com/episode/6a1547aa13abca418579b4b2（午后偏见045｜拉美）
+- 全流程：音频下载 → Groq 转录 → LLM 改写 → Gemini 封面 → Guizang 分发 → 飞书同步
+- 暴露 4 个隐性 bug（B1-B4），全部修复
+
+### Bug B1：飞书 schema 缺「是否发布」字段
+
+- 现象：新建飞书表无「是否发布」字段 → 前端 API 过滤永远 false → 文章永不显示
+- 修复：`config/feishu-setup.md` 加入该字段推荐说明
+
+### Bug B2：新建记录不自动勾选发布
+
+- 现象：即使表里有字段，新文章默认 `published=False`
+- 修复：`feishu/_sync.py:sync_from_export` 创建新记录前注入 `item["published"]=True`
+- env override：`CHORA_FEISHU_AUTO_PUBLISH=false` 关闭
+- per-record override：上游设 `item["published"]=False` 不被覆盖
+
+### Bug B3：本地 fallback JSON 不同步
+
+- 现象：`frontend/data/content.json` 与 `frontend/public/data/content.json` 与飞书表脱节
+- 修复：`feishu/_sync.py` 末尾自动调 `generate_frontend_data.py`
+- env override：`CHORA_FEISHU_REGENERATE_FRONTEND=false` 关闭
+
+### Bug B4：Bitable type 7↔17 互换（最阴险）
+
+- 现象：`feishu/_records.py:_feishu_type_to_internal` 把 `7→checkbox` / `11→attachment`，导致封面 file_token 被当 checkbox 写入 → `AttachFieldConvFail` → cover 静默丢失
+- 修复：交换 7↔17 + 加 string alias 表（飞书某些 endpoint 返回 `"Attachment"` 字符串）
+- 历史数据恢复：045 这条记录的封面通过 out-of-band raw PUT 修复（`{"封面": [{"file_token": "EX00xxxx"}]}`）
+
+### 测试覆盖
+
+- 6 个新 feishu mixin 测试：`test_default_injects_published_true` / `test_env_var_disables_auto_publish` / `test_per_record_published_false_not_overwritten` / `test_published_alias_resolves_in_create_payload` / `test_refresh_called_when_records_changed` / `test_refresh_skipped_when_env_disabled`
+- 全量测试 378 passed（原 372 + 新增 6）
+- CI 矩阵：3.10/3.11/3.12 + ruff + black + SKILL frontmatter 全绿
+
+### 完整 commit 链路（5 个 commit）
+
+| SHA | 说明 |
+|---|---|
+| `4d555b3` | feat(feishu): auto-publish + frontend refresh（B1+B2+B3 一并修，6 新测试） |
+| `c62f882` | fix(frontend): add 午后偏见045 cover to Vercel deployment（Vercel git 部署看不到 untracked 文件） |
+| `045eb9e` | fix(feishu): correct Bitable type mapping (7→attachment, 17→checkbox)（B4 根因修复） |
+
+### Follow-up（未做但已记录）
+
+- `#7` sync_covers.py 自动化：让 process-podcast 跑完自动复制封面到 `frontend/covers/` + commit，避免下次还得手动
+- `generate_cover.py:regenerate_missing_covers` 函数定义已修（T12 拆分时发现），但 process-podcast 没调这个 CLI

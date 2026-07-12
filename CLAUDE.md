@@ -117,6 +117,17 @@ Skill 遵循 **“记录并继续 (Log & Continue)”** 策略：
 
 **安全提示**：敏感信息优先使用 `.env` 文件配置，`config/sources.yaml` 与 `config/feishu.yaml` 中仅保留占位符。
 
+### 飞书同步自动行为（2026-07-12 修复）
+
+`feishu/_sync.py:sync_from_export` 现在自动做两件事：
+
+| 行为 | 默认 | Env Override |
+|---|---|---|
+| 新建记录时默认 `published=True` | ✅ 开启 | `CHORA_FEISHU_AUTO_PUBLISH=false` 关闭 |
+| Sync 完成后自动调 `generate_frontend_data.py` 刷新本地 fallback JSON | ✅ 开启 | `CHORA_FEISHU_REGENERATE_FRONTEND=false` 关闭 |
+
+完整修复历史见 `docs/reports/2026-07-12-feishu-fixes.md`。
+
 ### 内容过滤
 - **时长过滤**：默认最小 30 分钟（在 YAML 中配置）。
 - **日期范围**：批量模式下默认为最近 7 天。
@@ -253,6 +264,32 @@ FEISHU_BASE_ID=<base_id>
 FEISHU_TABLE_ID=<table_id>
 ```
 
+### 部署根目录（**重要**）
+
+Vercel 项目配置的 **Root Directory = `frontend/`**（见 `frontend/DEPLOY.md` §部署步骤）。
+
+后果：
+- 所有 Vercel 静态文件路径以 `frontend/` 为根
+- 前端 `<img src="/covers/xxx.jpg">` → 部署后对应 `frontend/covers/xxx.jpg`
+- `/api/content` 与 `/api/image` 对应 `frontend/api/content.js` 与 `frontend/api/image.js`
+- **仓库根下的同名目录（如 `covers/`、`content.json`）Vercel 看不到**
+
+### 封面图路径双轨制
+
+文章封面通过**两条独立路径**服务，必须保持同步：
+
+1. **飞书 API 主路径**（推荐）：
+   - `content_archive/.../cover.jpg` → `feishu_service.upload_image()` → 飞书 cover field
+   - 前端通过 `/api/image?token={file_token}` 代理认证下载
+   - **新增文章默认自动上传 + 写入 cover**（2026-07-12 修复 type 7↔17 互换后）
+
+2. **本地 fallback JSON 路径**（仅在 `/api/content` 失败时启用）：
+   - `frontend/covers/{safe_name}.{ext}` ← 从 `content_archive` 复制
+   - `frontend/data/content.json` + `frontend/public/data/content.json` 含 `cover_url: /covers/{safe_name}.{ext}`
+   - 由 `sync_from_export` 末尾自动调 `generate_frontend_data.py` 刷新（2026-07-12 新增）
+
+> ⚠️ 两条路径**不会自动同步**——飞书 cover 由 `feishu_service` 处理，本地 fallback 由手动 `sync_covers.py` 或 commit 文件处理。**未来改进**：让 `process-podcast` 跑完自动调 `sync_covers.py`。
+
 ### 故障排除
 详见 `frontend/DEPLOY.md`
 
@@ -262,11 +299,32 @@ FEISHU_TABLE_ID=<table_id>
 飞书多维表格中的「是否发布」复选框字段控制文章在前端的可见性：
 - **勾选**：文章在前端显示
 - **取消勾选**：文章从前端下架
+- **新文章默认勾选**：由 `feishu_service.sync_from_export` 自动写入（2026-07-12 修复）
+- **env override**：`CHORA_FEISHU_AUTO_PUBLISH=false` 关闭自动勾选
+- **per-record override**：上游设置 `item["published"]=False` 不被覆盖
 
 **技术实现**：
 - `api/content.js` 中通过 `filter()` 过滤 `是否发布 === true` 的记录
 - CDN 缓存时间：30 秒（`s-maxage=30`）
 - 更改后约 30 秒内生效，强制刷新可立即看到
+
+#### 新增飞书字段时的注意事项
+
+修改飞书 Bitable schema 时**必须同时更新**：
+1. `config/feishu-setup.md`（推荐字段表）
+2. `feishu/_fields.py:DEFAULT_FIELD_ALIASES`
+3. `frontend/api/content.js:FIELD_ALIASES`（API 层 alias）
+4. `content.json` 顶层字段（如该字段需前端展示）
+
+**Bitable type ID 速查**（`feishu/_records.py:_feishu_type_to_internal`）：
+| ID | 类型 |
+|---|---|
+| 1 | text |
+| 7 | attachment |
+| 11 | user |
+| 17 | checkbox |
+
+⚠️ 历史上 type 7↔17 曾互换，导致 attachment 字段写入失败（`AttachFieldConvFail`）。所有 schema 改动前先确认 type ID。
 
 #### 缓存策略
 ```
