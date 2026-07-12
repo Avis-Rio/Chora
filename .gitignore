@@ -42,6 +42,9 @@ inspect_*.py
 # Content archive (generated data)
 content_archive/
 content_export.json
+# Exceptions: keep test fixtures for reproducible integration tests
+!tests/fixtures/
+!tests/fixtures/content_archive/
 
 # Generated distribution packages
 distribution/
