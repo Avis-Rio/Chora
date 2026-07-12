@@ -26,14 +26,14 @@ All three depend on a small set of helpers that remain in
 import os
 import re
 
-from generate_cover.title import clean_title_with_llm, extract_title_from_dirname
+from generate_cover.image import generate_cover
 from generate_cover.style import (
     analyze_content_style,
     get_random_style,
     get_style_content,
     parse_style_content,
 )
-from generate_cover.image import generate_cover
+from generate_cover.title import clean_title_with_llm, extract_title_from_dirname
 
 
 def generate_podcast_cover(title, channel, output_path, description=None, content_path=None):
@@ -62,17 +62,17 @@ def generate_podcast_cover(title, channel, output_path, description=None, conten
             clean_title = clean_title.split("：", 1)[-1].split(":", 1)[-1].strip()
 
         # 1.5 移除括号及其内容（包括中文和英文括号）
-        clean_title = re.sub(r'（.*?）', '', clean_title)
-        clean_title = re.sub(r'\(.*?\)', '', clean_title)
+        clean_title = re.sub(r"（.*?）", "", clean_title)
+        clean_title = re.sub(r"\(.*?\)", "", clean_title)
         clean_title = clean_title.strip()
 
         # 2. 尝试根据分隔符拆分
         parts = []
         temp_title = clean_title
-        for sep in ['：', '—', ' - ', '｜', '︱', '丨', '│', '|', '-']:
-            temp_title = temp_title.replace(sep, '|')
-        if '|' in temp_title:
-            parts = [p.strip() for p in temp_title.split('|')]
+        for sep in ["：", "—", " - ", "｜", "︱", "丨", "│", "|", "-"]:
+            temp_title = temp_title.replace(sep, "|")
+        if "|" in temp_title:
+            parts = [p.strip() for p in temp_title.split("|")]
         else:
             parts = [clean_title]
 
@@ -87,18 +87,18 @@ def generate_podcast_cover(title, channel, output_path, description=None, conten
                 continue
 
             # 忽略类似 "Vol.12", "EP01", "No.3" 的部分
-            if re.match(r'^(Vol|Ep|No|Part)\.?\s*\d+', part, re.IGNORECASE):
+            if re.match(r"^(Vol|Ep|No|Part)\.?\s*\d+", part, re.IGNORECASE):
                 continue
 
             # 忽略类似 "午后偏见043" 这种 "中文+数字" 的系列名+期数格式
-            if re.match(r'^[一-龥]+\d+$', part) and len(part) <= 10:
+            if re.match(r"^[一-龥]+\d+$", part) and len(part) <= 10:
                 continue
 
             # 忽略包含频道名的部分（如果提供了频道名）
             if channel and channel != "Unknown":
                 if channel in part or part in channel:
                     continue
-                base_part = re.sub(r'\d+$', '', part).strip()
+                base_part = re.sub(r"\d+$", "", part).strip()
                 if base_part and (base_part in channel or channel in base_part):
                     continue
 
@@ -106,7 +106,7 @@ def generate_podcast_cover(title, channel, output_path, description=None, conten
 
         # 4. 选择最佳部分
         if valid_parts:
-            non_numeric_end_parts = [p for p in valid_parts if not re.search(r'\d+$', p)]
+            non_numeric_end_parts = [p for p in valid_parts if not re.search(r"\d+$", p)]
             if non_numeric_end_parts:
                 non_numeric_end_parts.sort(key=len, reverse=True)
                 clean_title = non_numeric_end_parts[0]
@@ -114,20 +114,20 @@ def generate_podcast_cover(title, channel, output_path, description=None, conten
                 valid_parts.sort(key=len, reverse=True)
                 clean_title = valid_parts[0]
 
-            if re.search(r'[一-龥]+\d+$', clean_title):
-                 match = re.match(r'^(.*?)\d+$', clean_title)
-                 if match:
-                     pass
+            if re.search(r"[一-龥]+\d+$", clean_title):
+                match = re.match(r"^(.*?)\d+$", clean_title)
+                if match:
+                    pass
         else:
             clean_title = title
-            clean_title = re.sub(r'（.*?）', '', clean_title)
-            clean_title = re.sub(r'\(.*?\)', '', clean_title)
+            clean_title = re.sub(r"（.*?）", "", clean_title)
+            clean_title = re.sub(r"\(.*?\)", "", clean_title)
             clean_title = clean_title.strip()
 
         # 移除常见前缀字符
-        for prefix in ['FULL ', 'EP', 'E', '#', '【', '】']:
+        for prefix in ["FULL ", "EP", "E", "#", "【", "】"]:
             if clean_title.startswith(prefix):
-                clean_title = clean_title[len(prefix):].strip()
+                clean_title = clean_title[len(prefix) :].strip()
 
         # 长度截断
         if len(clean_title) > 30:
@@ -165,7 +165,7 @@ def generate_podcast_cover(title, channel, output_path, description=None, conten
         style_data = {
             "Visual Elements": ["Clean composition", "High contrast"],
             "Color Palette": ["Deep Blue", "Gold", "White"],
-            "Mood": ["Professional", "Engaging"]
+            "Mood": ["Professional", "Engaging"],
         }
     else:
         style_data = parse_style_content(style_content)
@@ -295,11 +295,13 @@ def regenerate_missing_covers():
         if not os.path.isdir(dir_path):
             continue
 
-        has_cover = any([
-            os.path.exists(os.path.join(dir_path, "cover.png")),
-            os.path.exists(os.path.join(dir_path, "cover.jpg")),
-            os.path.exists(os.path.join(dir_path, "cover.jpeg"))
-        ])
+        has_cover = any(
+            [
+                os.path.exists(os.path.join(dir_path, "cover.png")),
+                os.path.exists(os.path.join(dir_path, "cover.jpg")),
+                os.path.exists(os.path.join(dir_path, "cover.jpeg")),
+            ]
+        )
 
         if has_cover:
             print(f"⏭️ Skip (has cover): {dir_path}")
@@ -311,12 +313,12 @@ def regenerate_missing_covers():
         metadata_path = os.path.join(dir_path, "metadata.md")
         content = ""
         if os.path.exists(metadata_path):
-            with open(metadata_path, 'r', encoding='utf-8') as f:
+            with open(metadata_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
         channel = "Unknown"
         if "小宇宙 - " in content:
-            channel = content.split("小宇宙 - ")[1].split('\n')[0].strip()
+            channel = content.split("小宇宙 - ")[1].split("\n")[0].strip()
 
         print(f"\n📍 Processing: {dir_path}")
         print(f"   Title: {title}")

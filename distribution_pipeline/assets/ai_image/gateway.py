@@ -21,8 +21,6 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Iterable
-
 
 # -----------------------------------------------------------------------------
 # 1. Gate 决策：何时调 AI 生图
@@ -159,17 +157,17 @@ def remember_in_cache(
 
 # 11 类（与乙项 category_router 一致）的 AI 生图 prompt 提示
 CATEGORY_PROMPTS: dict[str, str] = {
-    "travel":       "Editorial travel photo, atmospheric light, warm tones, no text, no logo, 3:4",
-    "workplace":    "Swiss style conceptual workplace image, clean off-white background, one IKB blue accent, no text, no logo, 3:4",
-    "game":         "Atmospheric game key art, dark moody palette, cinematic lighting, no text, no logo, 3:4",
-    "film":         "Cinematic film still, desaturated color, atmospheric depth, no text, no logo, 3:4",
-    "food":         "Editorial food photography, warm natural light, restrained composition, no text, no logo, 3:4",
-    "makeup":       "Product texture close-up, soft studio light, neutral palette, no text, no logo, 3:4",
-    "fitness":      "Swiss style data visualization, strong contrast, IKB blue accent, no text, no logo, 3:4",
-    "home":         "Editorial interior, soft natural light, warm wood tones, no text, no logo, 3:4",
-    "fashion":      "Editorial fashion detail, soft studio light, restrained palette, no text, no logo, 3:4",
-    "emotion":      "Atmospheric essay illustration, soft mist, contemplative mood, no text, no logo, 3:4",
-    "recommend":    "Swiss style product matrix, clean grid, one accent color, no text, no logo, 3:4",
+    "travel": "Editorial travel photo, atmospheric light, warm tones, no text, no logo, 3:4",
+    "workplace": "Swiss style conceptual workplace image, clean off-white background, one IKB blue accent, no text, no logo, 3:4",
+    "game": "Atmospheric game key art, dark moody palette, cinematic lighting, no text, no logo, 3:4",
+    "film": "Cinematic film still, desaturated color, atmospheric depth, no text, no logo, 3:4",
+    "food": "Editorial food photography, warm natural light, restrained composition, no text, no logo, 3:4",
+    "makeup": "Product texture close-up, soft studio light, neutral palette, no text, no logo, 3:4",
+    "fitness": "Swiss style data visualization, strong contrast, IKB blue accent, no text, no logo, 3:4",
+    "home": "Editorial interior, soft natural light, warm wood tones, no text, no logo, 3:4",
+    "fashion": "Editorial fashion detail, soft studio light, restrained palette, no text, no logo, 3:4",
+    "emotion": "Atmospheric essay illustration, soft mist, contemplative mood, no text, no logo, 3:4",
+    "recommend": "Swiss style product matrix, clean grid, one accent color, no text, no logo, 3:4",
 }
 
 
@@ -187,6 +185,7 @@ def build_prompt(query: str, role: str, category: str | None = None, theme: str 
 # 4. 调 generate_cover.py（不重写 Gemini client，仅 wrapper）
 # -----------------------------------------------------------------------------
 
+
 def _import_generate_cover():
     """动态 import 项目根的 `generate_cover.py`（不在 distribution_pipeline 路径下）。"""
     repo_root = Path(__file__).resolve().parents[3]
@@ -194,6 +193,7 @@ def _import_generate_cover():
         sys.path.insert(0, str(repo_root))
     try:
         import generate_cover  # type: ignore[import-not-found]
+
         return generate_cover
     except ImportError as exc:
         raise RuntimeError(
@@ -221,7 +221,10 @@ def generate_ai_asset(
     target_pages = request.get("target_pages", [])
     prompt = build_prompt(query, role, category=category, theme=theme)
     ext = "png" if prefer_png else "jpg"
-    asset_id = request.get("asset_id") or f"ai-{_content_hash(role, query, ','.join(sorted(target_pages)), theme or '')}"
+    asset_id = (
+        request.get("asset_id")
+        or f"ai-{_content_hash(role, query, ','.join(sorted(target_pages)), theme or '')}"
+    )
     filename = f"{asset_id}.{ext}"
     output_path = images_dir / filename
 

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 STYLE_DIR = Path(__file__).resolve().parents[1] / "styles"
 
 

@@ -16,33 +16,33 @@ def main():
     """Main entry point. Delegates to :class:`FeishuService`."""
     service = FeishuService()
 
-    feishu_cfg = service.config.get('feishu', {})
-    if not feishu_cfg.get('app_id'):
+    feishu_cfg = service.config.get("feishu", {})
+    if not feishu_cfg.get("app_id"):
         print("❌ Feishu not configured. Please set up config/feishu.yaml")
         print("See config/feishu-setup.md for instructions.")
         return
 
     if len(sys.argv) > 1:
-        if sys.argv[1] == 'sync':
+        if sys.argv[1] == "sync":
             # Parse arguments
-            export_path = 'content_export.json'
+            export_path = "content_export.json"
             force = False
 
             for arg in sys.argv[2:]:
-                if arg == '--force':
+                if arg == "--force":
                     force = True
-                elif not arg.startswith('--'):
+                elif not arg.startswith("--"):
                     export_path = arg
 
             service.sync_from_export(export_path, force=force)
 
-        elif sys.argv[1] == 'list':
+        elif sys.argv[1] == "list":
             records = service.list_records()
             print(f"Found {len(records)} records")
             for r in records:
                 print(f"  - {r.get('fields', {}).get('标题', 'Unknown')}")
 
-        elif sys.argv[1] == 'check':
+        elif sys.argv[1] == "check":
             # Check record completeness
             print("🔍 Checking record completeness...")
             records = service.list_records()
@@ -50,7 +50,7 @@ def main():
             incomplete = 0
             for r in records:
                 is_complete, missing = service.is_record_complete(r)
-                title = r.get('fields', {}).get('标题', 'Unknown')[:35]
+                title = r.get("fields", {}).get("标题", "Unknown")[:35]
                 if is_complete:
                     print(f"  ✅ {title}")
                     complete += 1
@@ -59,7 +59,7 @@ def main():
                     incomplete += 1
             print(f"\n📊 Summary: {complete} complete, {incomplete} incomplete")
 
-        elif sys.argv[1] == 'test':
+        elif sys.argv[1] == "test":
             token = service.get_access_token()
             if token:
                 print(f"✅ Auth successful, token: {token[:20]}...")

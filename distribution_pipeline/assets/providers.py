@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import json
+import os
 from pathlib import Path
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
@@ -49,7 +49,10 @@ def _pexels_candidates(request: dict, fetch_json, api_key: str, max_candidates: 
             _compact_candidate(
                 {
                     "provider": "pexels",
-                    "image_url": src.get("medium") or src.get("large") or src.get("large2x") or src.get("small"),
+                    "image_url": src.get("medium")
+                    or src.get("large")
+                    or src.get("large2x")
+                    or src.get("small"),
                     "source_url": photo.get("url"),
                     "author": photo.get("photographer", ""),
                     "author_url": photo.get("photographer_url", ""),
@@ -217,7 +220,9 @@ def discover_image_candidates(
             )
         )
     if "wallhaven" in request.get("providers", []):
-        provider_calls.append(("wallhaven", lambda: _wallhaven_candidates(request, fetch_json, max_candidates)))
+        provider_calls.append(
+            ("wallhaven", lambda: _wallhaven_candidates(request, fetch_json, max_candidates))
+        )
 
     for provider, provider_call in provider_calls:
         try:

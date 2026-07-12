@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 VENDOR = Path("distribution_pipeline/vendor/guizang")
 
 

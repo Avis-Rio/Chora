@@ -130,8 +130,10 @@ def fetch_page(url: str, retries: int = 3, backoff: float = 2.0, timeout: int = 
         except Exception as exc:
             last_error = exc
             if attempt < retries - 1:
-                sleep_time = backoff * (2 ** attempt)
-                print(f"  ⚠️ Fetch attempt {attempt + 1}/{retries} failed: {exc}. Retrying in {sleep_time}s...")
+                sleep_time = backoff * (2**attempt)
+                print(
+                    f"  ⚠️ Fetch attempt {attempt + 1}/{retries} failed: {exc}. Retrying in {sleep_time}s..."
+                )
                 time.sleep(sleep_time)
     raise RuntimeError(f"Failed to fetch {url} after {retries} attempts: {last_error}")
 
@@ -155,11 +157,7 @@ def _extract_from_next_data(next_data: dict[str, Any]) -> dict[str, Any] | None:
     """Pull episode fields from Next.js data structure."""
     if not isinstance(next_data, dict):
         return None
-    episode = (
-        next_data.get("props", {})
-        .get("pageProps", {})
-        .get("episode")
-    )
+    episode = next_data.get("props", {}).get("pageProps", {}).get("episode")
     if not isinstance(episode, dict):
         return None
 
@@ -196,7 +194,11 @@ def _extract_from_json_ld(json_ld: list[dict]) -> dict[str, Any] | None:
                 audio = item["audio"].get("contentUrl", "") or item["audio"].get("url", "")
             return {
                 "title": item.get("name", ""),
-                "channel": item.get("partOfSeries", {}).get("name", "") if isinstance(item.get("partOfSeries"), dict) else "",
+                "channel": (
+                    item.get("partOfSeries", {}).get("name", "")
+                    if isinstance(item.get("partOfSeries"), dict)
+                    else ""
+                ),
                 "upload_date": _normalize_date(item.get("datePublished", "")),
                 "audio_url": audio or item.get("contentUrl", ""),
                 "description": item.get("description", ""),
@@ -226,8 +228,8 @@ def _extract_from_html(html: str) -> dict[str, Any] | None:
     """Last-resort regex-based extraction for title/description/audio."""
     title = ""
     for pattern in [
-        r'<h1[^>]*>(.*?)</h1>',
-        r'<title>(.*?)</title>',
+        r"<h1[^>]*>(.*?)</h1>",
+        r"<title>(.*?)</title>",
     ]:
         match = re.search(pattern, html, re.DOTALL | re.IGNORECASE)
         if match:

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 import copy
+import json
 import re
-import shutil
 from html import escape
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -17,7 +16,6 @@ from distribution_pipeline.assets.ai_image.gateway import (
 )
 from distribution_pipeline.assets.downloader import download_candidate, inspect_image_bytes
 from distribution_pipeline.assets.providers import default_fetch_json, discover_image_candidates
-
 
 PROVIDER_NOTES = {
     "pexels": "支持中文搜索，适合大众场景与本地化生活方式图片。",
@@ -33,7 +31,10 @@ SEMANTIC_QUERY_RULES = [
     (("being alone", "solitude", "孤独", "孤寂", "独处"), "person alone by window"),
     (("回避", "焦虑", "杏仁核", "卧室", "不出门"), "person alone bedroom window"),
     (("第三空间", "公共空间", "咖啡馆", "公园", "图书馆"), "quiet city cafe library"),
-    (("外在动机", "身份", "表演", "点赞", "反应", "社交媒体", "不发布"), "person mirror smartphone social media"),
+    (
+        ("外在动机", "身份", "表演", "点赞", "反应", "社交媒体", "不发布"),
+        "person mirror smartphone social media",
+    ),
     (("沉默", "自主权", "记录", "测量", "变现"), "person alone window silhouette"),
     (("蛰居", "hikikomori"), "person alone bedroom"),
     (("grow an audience", "followers", "audience", "粉丝", "受众"), "social media content creator"),
@@ -183,7 +184,9 @@ def _priority_evidence_offsets(insights: list[dict], max_evidence: int) -> list[
     return offsets[:max_evidence]
 
 
-def _evidence_page_offsets(insight_count: int, max_evidence: int, insights: list[dict] | None = None) -> list[int]:
+def _evidence_page_offsets(
+    insight_count: int, max_evidence: int, insights: list[dict] | None = None
+) -> list[int]:
     if insight_count <= 0 or max_evidence <= 0:
         return []
     offsets = _priority_evidence_offsets(insights or [], max_evidence) if insights else []
@@ -278,7 +281,9 @@ def _copy_local_asset(asset: dict, images_dir: Path) -> dict:
 
 
 def _candidate_identity(candidate: dict) -> str:
-    return str(candidate.get("source_url") or candidate.get("image_url") or candidate.get("candidate_id") or "")
+    return str(
+        candidate.get("source_url") or candidate.get("image_url") or candidate.get("candidate_id") or ""
+    )
 
 
 def _select_candidate(request: dict, used_sources: set[str] | None = None) -> dict | None:
@@ -289,7 +294,10 @@ def _select_candidate(request: dict, used_sources: set[str] | None = None) -> di
     selected_id = request.get("selected_candidate_id")
     if selected_id:
         for candidate in candidates:
-            if candidate.get("candidate_id") == selected_id and _candidate_identity(candidate) not in used_sources:
+            if (
+                candidate.get("candidate_id") == selected_id
+                and _candidate_identity(candidate) not in used_sources
+            ):
                 return candidate
     for candidate in candidates:
         if _candidate_identity(candidate) not in used_sources:
@@ -564,9 +572,7 @@ def _sources_markdown(plan: dict) -> str:
         if request.get("candidate_error"):
             lines.append(f"- 候选抓取错误：{request.get('candidate_error')}")
         for error in request.get("candidate_errors", []):
-            lines.append(
-                f"- 候选抓取错误：{error.get('provider', 'unknown')} · {error.get('error', '')}"
-            )
+            lines.append(f"- 候选抓取错误：{error.get('provider', 'unknown')} · {error.get('error', '')}")
         if request.get("download_error"):
             lines.append(f"- 下载错误：{request.get('download_error')}")
         for candidate in request.get("candidates", []):
@@ -610,7 +616,13 @@ def materialize_image_assets(
     fetch_bytes=None,
 ) -> dict:
     if not plan:
-        return {"version": 1, "status": "empty", "local_assets": [], "requests": [], "providers": PROVIDER_NOTES}
+        return {
+            "version": 1,
+            "status": "empty",
+            "local_assets": [],
+            "requests": [],
+            "providers": PROVIDER_NOTES,
+        }
     assets_dir = Path(assets_dir)
     images_dir = assets_dir / "images"
     if image_asset_mode not in ("plan", "candidates", "download"):
@@ -628,7 +640,9 @@ def materialize_image_assets(
             assets_dir,
             fetch_bytes=fetch_bytes,
         )
-    materialized["local_assets"] = [_copy_local_asset(asset, images_dir) for asset in plan.get("local_assets", [])]
+    materialized["local_assets"] = [
+        _copy_local_asset(asset, images_dir) for asset in plan.get("local_assets", [])
+    ]
     materialized.setdefault("selected_assets", [])
     # 戊项 C 通道：未满足的 evidence/cover_hero → 调 Gemini AI 生图兜底
     # plan 模式（默认）只写搜索计划，按 upstream "Daily 后处理必须记录并继续"

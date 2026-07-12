@@ -10,7 +10,6 @@ from distribution_pipeline.renderers.guizang.subject_mapper import (
     subject_map_html_comment,
 )
 
-
 # -----------------------------------------------------------------------------
 # 1. classify_subject：主体类型推断
 # -----------------------------------------------------------------------------
@@ -171,9 +170,17 @@ def test_build_subject_map_returns_full_schema():
 
     # 必含字段
     for key in (
-        "type", "label", "face", "focus", "safe_zone",
-        "quiet_zone", "light", "object_position",
-        "passes_quiet_zone", "passes_light", "requires_localized_tint",
+        "type",
+        "label",
+        "face",
+        "focus",
+        "safe_zone",
+        "quiet_zone",
+        "light",
+        "object_position",
+        "passes_quiet_zone",
+        "passes_light",
+        "requires_localized_tint",
     ):
         assert key in smap, f"missing key: {key}"
 

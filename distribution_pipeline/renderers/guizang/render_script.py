@@ -1,6 +1,5 @@
 import json
 
-
 ROLE_SUFFIX = {
     "cover": "cover",
     "insight": "insight",
@@ -223,8 +222,6 @@ def build_render_script(html_name: str, targets: list[dict]) -> str:
     """Generate the render.cjs content. Uses str.replace for placeholders to avoid f-string brace escape."""
     targets_json = json.dumps(targets, ensure_ascii=False, indent=2)
     html_name_json = json.dumps(html_name)
-    return (
-        _RENDER_SCRIPT_TEMPLATE
-        .replace("{html_name_json}", html_name_json)
-        .replace("{targets_json}", targets_json)
+    return _RENDER_SCRIPT_TEMPLATE.replace("{html_name_json}", html_name_json).replace(
+        "{targets_json}", targets_json
     )

@@ -4,10 +4,10 @@
 支持分批执行、大文件检测和完整性检查
 """
 
+import argparse
 import os
 import sys
 import time
-import argparse
 from pathlib import Path
 
 # 添加项目根目录到 Python 路径
@@ -15,8 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import rewrite_service
 from distribution_pipeline.automation import generate_distribution_after_rewrite
-from utils.content_validator import check_directory, scan_content_archive
-
+from utils.content_validator import scan_content_archive
 
 # 阈值配置
 LARGE_FILE_THRESHOLD_KB = 40  # 超过此大小认为是"大文件"，单独处理
@@ -32,20 +31,17 @@ def categorize_by_size(transcript_paths: list) -> dict:
         'large': [...]   # 大文件，单独排队处理
     }
     """
-    categories = {'small': [], 'large': []}
+    categories = {"small": [], "large": []}
 
     for path in transcript_paths:
         size_kb = os.path.getsize(path) / 1024
-        entry = {
-            'transcript': path,
-            'size_kb': size_kb
-        }
+        entry = {"transcript": path, "size_kb": size_kb}
 
         if size_kb > LARGE_FILE_THRESHOLD_KB:
-            categories['large'].append(entry)
+            categories["large"].append(entry)
             print(f"📦 大文件 ({size_kb:.1f} KB): {Path(path).parent.name}")
         else:
-            categories['small'].append(entry)
+            categories["small"].append(entry)
 
     return categories
 
@@ -60,12 +56,12 @@ def process_batch(tasks: list, dry_run: bool = False, generate_distribution: boo
 
     Returns: {'success': int, 'failed': int, 'skipped': int}
     """
-    results = {'success': 0, 'failed': 0, 'skipped': 0}
+    results = {"success": 0, "failed": 0, "skipped": 0}
 
     for task in tasks:
-        transcript_path = task['transcript']
-        metadata_path = task['metadata']
-        output_path = task['output']
+        transcript_path = task["transcript"]
+        metadata_path = task["metadata"]
+        output_path = task["output"]
         content_name = Path(transcript_path).parent.name
 
         print(f"\n▶️  处理: {content_name}")
@@ -73,7 +69,7 @@ def process_batch(tasks: list, dry_run: bool = False, generate_distribution: boo
         # 检查 transcript 是否存在
         if not os.path.exists(transcript_path):
             print(f"❌ Transcript 不存在: {transcript_path}")
-            results['failed'] += 1
+            results["failed"] += 1
             continue
 
         # 二次检查：rewritten.md 是否已存在
@@ -82,39 +78,37 @@ def process_batch(tasks: list, dry_run: bool = False, generate_distribution: boo
             if size > 100:  # 文件存在且有意义（非空）
                 print(f"⏭️  已存在 rewritten.md ({size} bytes)，跳过")
                 if generate_distribution and not dry_run:
-                    generate_distribution_after_rewrite(Path(output_path).parent, context="batch_rewrite:skipped")
-                results['skipped'] += 1
+                    generate_distribution_after_rewrite(
+                        Path(output_path).parent, context="batch_rewrite:skipped"
+                    )
+                results["skipped"] += 1
                 continue
 
         # 执行 rewrite
         if dry_run:
             print(f"🔍 [DRY RUN] 将会执行 rewrite: {transcript_path}")
-            results['success'] += 1
+            results["success"] += 1
         else:
             try:
-                success = rewrite_service.rewrite_content(
-                    transcript_path,
-                    metadata_path,
-                    output_path
-                )
+                success = rewrite_service.rewrite_content(transcript_path, metadata_path, output_path)
 
                 if success:
                     print(f"✅ 成功: {content_name}")
                     if generate_distribution:
                         generate_distribution_after_rewrite(Path(output_path).parent, context="batch_rewrite")
-                    results['success'] += 1
+                    results["success"] += 1
                 else:
                     print(f"❌ 失败: {content_name}")
-                    results['failed'] += 1
+                    results["failed"] += 1
 
             except Exception as e:
                 print(f"❌ 错误: {e}")
-                results['failed'] += 1
+                results["failed"] += 1
 
     return results
 
 
-def find_rewrite_tasks(archive_root: str = 'content_archive', days: int = 0) -> list:
+def find_rewrite_tasks(archive_root: str = "content_archive", days: int = 0) -> list:
     """
     扫描需要 rewrite 的内容
 
@@ -123,67 +117,39 @@ def find_rewrite_tasks(archive_root: str = 'content_archive', days: int = 0) -> 
     tasks = []
 
     # 获取不完整的条目
-    stats = scan_content_archive(
-        archive_root=archive_root,
-        days=days,
-        only_invalid=False,
-        verbose=False
-    )
+    stats = scan_content_archive(archive_root=archive_root, days=days, only_invalid=False, verbose=False)
 
-    for entry in stats['invalid_entries']:
-        content_dir = Path(entry['path'])
+    for entry in stats["invalid_entries"]:
+        content_dir = Path(entry["path"])
 
         # 只处理 transcript 存在但 rewritten.md 缺失的情况
-        transcript_path = content_dir / 'transcript.md'
-        metadata_path = content_dir / 'metadata.md'
-        output_path = content_dir / 'rewritten.md'
+        transcript_path = content_dir / "transcript.md"
+        metadata_path = content_dir / "metadata.md"
+        output_path = content_dir / "rewritten.md"
 
         if transcript_path.exists() and metadata_path.exists():
-            tasks.append({
-                'transcript': str(transcript_path),
-                'metadata': str(metadata_path),
-                'output': str(output_path),
-                'date': entry['date'],
-                'missing': entry['missing']
-            })
+            tasks.append(
+                {
+                    "transcript": str(transcript_path),
+                    "metadata": str(metadata_path),
+                    "output": str(output_path),
+                    "date": entry["date"],
+                    "missing": entry["missing"],
+                }
+            )
 
     return tasks
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description='批量重写脚本（增强版）'
-    )
+    parser = argparse.ArgumentParser(description="批量重写脚本（增强版）")
+    parser.add_argument("--days", "-d", type=int, default=0, help="处理最近 N 天的内容（0 表示全部）")
+    parser.add_argument("--dry-run", action="store_true", help="只检查不执行")
+    parser.add_argument("--large-only", action="store_true", help="只处理大文件 (>40KB)")
+    parser.add_argument("--small-only", action="store_true", help="只处理小文件 (<=40KB)")
+    parser.add_argument("--archive-root", default="content_archive", help="内容存档根目录")
     parser.add_argument(
-        '--days', '-d',
-        type=int,
-        default=0,
-        help='处理最近 N 天的内容（0 表示全部）'
-    )
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='只检查不执行'
-    )
-    parser.add_argument(
-        '--large-only',
-        action='store_true',
-        help='只处理大文件 (>40KB)'
-    )
-    parser.add_argument(
-        '--small-only',
-        action='store_true',
-        help='只处理小文件 (<=40KB)'
-    )
-    parser.add_argument(
-        '--archive-root',
-        default='content_archive',
-        help='内容存档根目录'
-    )
-    parser.add_argument(
-        '--generate-distribution',
-        action='store_true',
-        help='rewrite 成功或已存在后生成 Guizang 小红书分发包'
+        "--generate-distribution", action="store_true", help="rewrite 成功或已存在后生成 Guizang 小红书分发包"
     )
 
     args = parser.parse_args()
@@ -197,10 +163,7 @@ def main():
 
     # 扫描需要处理的任务
     print("🔍 扫描待处理内容...")
-    all_tasks = find_rewrite_tasks(
-        archive_root=args.archive_root,
-        days=args.days
-    )
+    all_tasks = find_rewrite_tasks(archive_root=args.archive_root, days=args.days)
 
     if not all_tasks:
         print("\n✅ 没有需要处理的内容")
@@ -209,10 +172,10 @@ def main():
     print(f"找到 {len(all_tasks)} 个待处理内容")
 
     # 按大小分类
-    transcript_paths = [t['transcript'] for t in all_tasks]
+    transcript_paths = [t["transcript"] for t in all_tasks]
     categories = categorize_by_size(transcript_paths)
 
-    print(f"\n📊 分类统计:")
+    print("\n📊 分类统计:")
     print(f"   小文件: {len(categories['small'])} 个")
     print(f"   大文件: {len(categories['large'])} 个")
 
@@ -220,14 +183,14 @@ def main():
     tasks_to_process = []
 
     if args.large_only:
-        tasks_to_process = categories['large']
+        tasks_to_process = categories["large"]
         print("\n⚠️  只处理大文件")
     elif args.small_only:
-        tasks_to_process = categories['small']
+        tasks_to_process = categories["small"]
         print("\n⚠️  只处理小文件")
     else:
         # 默认：先处理小文件，再处理大文件
-        tasks_to_process = categories['small'] + categories['large']
+        tasks_to_process = categories["small"] + categories["large"]
 
     if not tasks_to_process:
         print("\n✅ 没有匹配条件的任务")
@@ -238,8 +201,8 @@ def main():
     if args.dry_run:
         print("\n🔍 DRY RUN 模式预览:")
         for task in tasks_to_process:
-            size_kb = task.get('size_kb', os.path.getsize(task['transcript']) / 1024)
-            name = Path(task['transcript']).parent.name
+            size_kb = task.get("size_kb", os.path.getsize(task["transcript"]) / 1024)
+            name = Path(task["transcript"]).parent.name
             print(f"   - {name} ({size_kb:.1f} KB)")
 
         return
@@ -250,43 +213,37 @@ def main():
     print("=" * 60)
 
     # 先处理小文件批次
-    if categories['small']:
+    if categories["small"]:
         print(f"\n📦 第一批次: 小文件 ({len(categories['small'])} 个)")
-        small_transcripts = {x['transcript'] for x in categories['small']}
+        small_transcripts = {x["transcript"] for x in categories["small"]}
         small_tasks = [
-            {
-                'transcript': t['transcript'],
-                'metadata': t['metadata'],
-                'output': t['output']
-            }
+            {"transcript": t["transcript"], "metadata": t["metadata"], "output": t["output"]}
             for t in all_tasks
-            if t['transcript'] in small_transcripts
+            if t["transcript"] in small_transcripts
         ]
         results1 = process_batch(small_tasks, generate_distribution=args.generate_distribution)
 
-        print(f"\n小文件批次完成: {results1['success']} 成功, {results1['skipped']} 跳过, {results1['failed']} 失败")
+        print(
+            f"\n小文件批次完成: {results1['success']} 成功, {results1['skipped']} 跳过, {results1['failed']} 失败"
+        )
 
-        if categories['large']:
+        if categories["large"]:
             print(f"\n⏳ 等待 {BATCH_DELAY} 秒后处理大文件批次...")
             time.sleep(BATCH_DELAY)
 
     # 再处理大文件批次（每个之间增加延迟）
-    if categories['large']:
+    if categories["large"]:
         print(f"\n📦 第二批次: 大文件 ({len(categories['large'])} 个)")
-        large_transcripts = {x['transcript'] for x in categories['large']}
+        large_transcripts = {x["transcript"] for x in categories["large"]}
         large_tasks = [
-            {
-                'transcript': t['transcript'],
-                'metadata': t['metadata'],
-                'output': t['output']
-            }
+            {"transcript": t["transcript"], "metadata": t["metadata"], "output": t["output"]}
             for t in all_tasks
-            if t['transcript'] in large_transcripts
+            if t["transcript"] in large_transcripts
         ]
 
         for i, task in enumerate(large_tasks, 1):
             print(f"\n[{i}/{len(large_tasks)}] 处理大文件任务")
-            result = process_batch([task], generate_distribution=args.generate_distribution)
+            process_batch([task], generate_distribution=args.generate_distribution)
             time.sleep(BATCH_DELAY)
 
     # 总结

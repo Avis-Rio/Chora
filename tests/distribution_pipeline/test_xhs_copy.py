@@ -1,6 +1,4 @@
-from distribution_pipeline.renderers.xhs_copy import build_xhs_caption
-from distribution_pipeline.renderers.xhs_copy import build_xhs_publish_md
-from distribution_pipeline.renderers.xhs_copy import build_xhs_tags
+from distribution_pipeline.renderers.xhs_copy import build_xhs_caption, build_xhs_publish_md, build_xhs_tags
 
 
 def test_build_xhs_publish_md_has_copyable_caption_tags_and_comment():

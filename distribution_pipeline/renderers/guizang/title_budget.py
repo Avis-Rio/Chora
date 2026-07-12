@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from distribution_pipeline.renderers.guizang.title_breaker import semantic_title_lines, strip_title_punctuation
+from distribution_pipeline.renderers.guizang.title_breaker import (
+    semantic_title_lines,
+    strip_title_punctuation,
+)
 
 
 @dataclass(frozen=True)
@@ -52,8 +55,34 @@ TITLE_BUDGETS: dict[str, TitleBudget] = {
 }
 
 _STOP_WORDS = {
-    "一个", "一种", "那些", "这个", "这场", "这种", "通过", "关于", "因为", "但是", "如果", "以及", "并且", "我们", "他们",
-    "真正", "其实", "正在", "可以", "不是", "就是", "成为", "来自", "对于", "之间", "之中", "之下", "背后",
+    "一个",
+    "一种",
+    "那些",
+    "这个",
+    "这场",
+    "这种",
+    "通过",
+    "关于",
+    "因为",
+    "但是",
+    "如果",
+    "以及",
+    "并且",
+    "我们",
+    "他们",
+    "真正",
+    "其实",
+    "正在",
+    "可以",
+    "不是",
+    "就是",
+    "成为",
+    "来自",
+    "对于",
+    "之间",
+    "之中",
+    "之下",
+    "背后",
 }
 _CONNECTORS = "，,。；;：:、———-｜|（）()《》“”\"'！？!?"
 
@@ -112,11 +141,15 @@ def title_variants(title: str, recipe: str | None = None) -> dict:
     budget = title_budget_for(recipe)
     display = shorten_title(title, budget.max_chars)
     short = shorten_title(display, min(10, max(6, budget.line_chars)))
-    lines = semantic_title_lines(display, target=budget.line_chars, max_lines=budget.max_lines, min_tail=budget.min_tail)
+    lines = semantic_title_lines(
+        display, target=budget.line_chars, max_lines=budget.max_lines, min_tail=budget.min_tail
+    )
     # If semantic packing still exceeds budget after rebalancing, shorten once more.
     if len(lines) > budget.max_lines or any(len(line) > budget.line_chars + 2 for line in lines):
         display = shorten_title(display, max(6, budget.line_chars * budget.max_lines - 2))
-        lines = semantic_title_lines(display, target=budget.line_chars, max_lines=budget.max_lines, min_tail=budget.min_tail)
+        lines = semantic_title_lines(
+            display, target=budget.line_chars, max_lines=budget.max_lines, min_tail=budget.min_tail
+        )
     return {
         "source_title": str(title or ""),
         "display_title": display,

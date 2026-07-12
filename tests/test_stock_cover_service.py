@@ -1,4 +1,3 @@
-import os
 import pytest
 
 from stock_cover_service import (

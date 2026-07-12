@@ -22,7 +22,9 @@ def render_wechat_package(package: dict, package_dir: Path, style_id: str = "cho
         "body": f"{source.get('channel', 'Unknown')} · Chora 深度内容",
         "index": 1,
     }
-    hero_html = render_card_html(hero_card, briefs[0] if briefs else {}, style, get_platform_spec("wechat_hero"))
+    hero_html = render_card_html(
+        hero_card, briefs[0] if briefs else {}, style, get_platform_spec("wechat_hero")
+    )
     hero_path = wechat_dir / "hero.html"
     hero_path.write_text(hero_html, encoding="utf-8")
     written.append(hero_path)

@@ -1,5 +1,8 @@
-from distribution_pipeline.renderers.guizang.render_script import build_render_script, build_xhs_render_targets
 from distribution_pipeline.renderers.guizang.guizang_renderer import build_wechat_render_targets
+from distribution_pipeline.renderers.guizang.render_script import (
+    build_render_script,
+    build_xhs_render_targets,
+)
 
 
 def test_build_xhs_render_script_targets_posters():
@@ -12,15 +15,15 @@ def test_build_xhs_render_script_targets_posters():
     assert "xhs-01-cover.png" in script
     assert "chromium.launch" in script
     assert "_loadPlaywrightChromium" in script
-    assert 'process.env.GUIZANG_RENDERER' in script
-    assert 'Playwright launch failed, falling back to wkhtmltoimage' in script
+    assert "process.env.GUIZANG_RENDERER" in script
+    assert "Playwright launch failed, falling back to wkhtmltoimage" in script
     assert 'const { chromium } = require("playwright");' not in script
     assert r"/<style>[\s\S]*?<\/style>/" in script
     assert r"/<style>[\\s\\S]*?<\/style>/" not in script
     assert '"--width", String(size.width)' in script
     assert '"--height", String(size.height)' in script
-    assert 'path.join(root, `_tmp_${sectionId}.html`)' in script
-    assert 'path.join(outputDir, `_tmp_${sectionId}.html`)' not in script
+    assert "path.join(root, `_tmp_${sectionId}.html`)" in script
+    assert "path.join(outputDir, `_tmp_${sectionId}.html`)" not in script
     assert 'waitUntil: "domcontentloaded"' in script
     assert "networkidle" not in script
     # 系統 Chrome 兜底路徑是允許的（macOS 優先）

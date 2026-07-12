@@ -29,7 +29,9 @@ def _build_post_md(source: dict, insights: list[dict]) -> str:
     return build_xhs_publish_md(source, insights)
 
 
-def render_xhs_package(package: dict, package_dir: Path, style_id: str = "chora-editorial", max_cards: int = 8) -> list[Path]:
+def render_xhs_package(
+    package: dict, package_dir: Path, style_id: str = "chora-editorial", max_cards: int = 8
+) -> list[Path]:
     package_dir = Path(package_dir)
     cards_dir = package_dir / "xhs" / "cards"
     cards_dir.mkdir(parents=True, exist_ok=True)

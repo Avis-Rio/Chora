@@ -2,12 +2,29 @@ from __future__ import annotations
 
 import re
 
-from distribution_pipeline.renderers.guizang.title_breaker import semantic_title_lines, strip_title_punctuation
+from distribution_pipeline.renderers.guizang.title_breaker import (
+    semantic_title_lines,
+    strip_title_punctuation,
+)
 from distribution_pipeline.renderers.guizang.title_budget import title_variants
 
 FORBIDDEN_LINE_END = set("在与和的更不也是于中而及但代界性时、，：；")
 FORBIDDEN_LINE_START = set("的了与和更中于而也及、，：；")
-_CORE_TERMS = ("审美", "形塑", "知识", "价值", "文化", "阅读", "收藏", "传统", "经典", "书籍", "童书", "想象", "判断")
+_CORE_TERMS = (
+    "审美",
+    "形塑",
+    "知识",
+    "价值",
+    "文化",
+    "阅读",
+    "收藏",
+    "传统",
+    "经典",
+    "书籍",
+    "童书",
+    "想象",
+    "判断",
+)
 _PUNCT = "，,。.!！?？；;：:、-—“”\"'（）()[]【】《》"
 MIN_PAYLOAD_CHARS = 190
 MIN_POINT_COUNT = 3
@@ -109,7 +126,24 @@ def _split_headline(title: str) -> tuple[str, str]:
     clean = strip_title_punctuation(str(title or "").strip())
     if not clean:
         return "Chora", ""
-    separators = ("不仅", "不是", "无法", "远胜", "更在", "形塑", "赋予", "丰富", "激发", "保持", "如", "是", "也", "而", "但", "并")
+    separators = (
+        "不仅",
+        "不是",
+        "无法",
+        "远胜",
+        "更在",
+        "形塑",
+        "赋予",
+        "丰富",
+        "激发",
+        "保持",
+        "如",
+        "是",
+        "也",
+        "而",
+        "但",
+        "并",
+    )
     for sep in separators:
         pos = clean.find(sep)
         if 3 <= pos <= 12:
@@ -170,7 +204,9 @@ def _unique_sentences(values: list[str], limit: int = 5) -> list[str]:
 def _phrase_points(title: str, body: str, limit: int = 5) -> list[str]:
     """从长句中提取可做版面锚点的短语，避免卡片只有一段正文。"""
     text = strip_title_punctuation(" ".join([title, body]))
-    chunks = [chunk.strip(_PUNCT + " ") for chunk in re.split(r"[，,。.!！?？；;：:、\s]+", text) if chunk.strip()]
+    chunks = [
+        chunk.strip(_PUNCT + " ") for chunk in re.split(r"[，,。.!！?？；;：:、\s]+", text) if chunk.strip()
+    ]
     candidates: list[str] = []
     for chunk in chunks:
         if len(chunk) < 4:
@@ -235,10 +271,19 @@ def _qa_flags(payload_chars: int, points: list[str], details: list[str], pullquo
 
 
 def _non_repeating(candidate: str, *against: str, length: int = 8) -> bool:
-    return bool(candidate.strip()) and all(not _common_run(candidate, item, length) for item in against if item)
+    return bool(candidate.strip()) and all(
+        not _common_run(candidate, item, length) for item in against if item
+    )
 
 
-def _make_pullquote(title: str, raw_body: str, body: str, subhead: str, used: set[str] | None = None, body_parts: list[str] | None = None) -> str:
+def _make_pullquote(
+    title: str,
+    raw_body: str,
+    body: str,
+    subhead: str,
+    used: set[str] | None = None,
+    body_parts: list[str] | None = None,
+) -> str:
     used = used or set()
     body_parts = body_parts or []
 
@@ -262,10 +307,18 @@ def _make_pullquote(title: str, raw_body: str, body: str, subhead: str, used: se
             pos = title.find(sep)
             if 8 <= pos <= 40:
                 tail = strip_title_punctuation(title[pos + 1 :])
-                if 14 <= len(tail) <= 40 and _norm_text(tail) not in used and _non_repeating(tail, body, subhead, length=8):
+                if (
+                    14 <= len(tail) <= 40
+                    and _norm_text(tail) not in used
+                    and _non_repeating(tail, body, subhead, length=8)
+                ):
                     return _cap_sentence(tail, 72)
                 half = strip_title_punctuation(title[:pos])
-                if 14 <= len(half) <= 40 and _norm_text(half) not in used and _non_repeating(half, body, subhead, length=8):
+                if (
+                    14 <= len(half) <= 40
+                    and _norm_text(half) not in used
+                    and _non_repeating(half, body, subhead, length=8)
+                ):
                     return _cap_sentence(half, 72)
 
     # 次选：body 中段或尾句（避开首句，保留给 points/details）。
@@ -299,16 +352,28 @@ def _make_pullquote(title: str, raw_body: str, body: str, subhead: str, used: se
             pos = title_clean.find(sep)
             if 8 <= pos <= 40:
                 tail = title_clean[pos + 1 :].strip(_PUNCT)
-                if 14 <= len(tail) <= 40 and _norm_text(tail) not in used and _non_repeating(tail, body, subhead, length=8):
+                if (
+                    14 <= len(tail) <= 40
+                    and _norm_text(tail) not in used
+                    and _non_repeating(tail, body, subhead, length=8)
+                ):
                     return _cap_sentence(tail, 72)
                 half = title_clean[:pos].strip(_PUNCT)
-                if 14 <= len(half) <= 40 and _norm_text(half) not in used and _non_repeating(half, body, subhead, length=8):
+                if (
+                    14 <= len(half) <= 40
+                    and _norm_text(half) not in used
+                    and _non_repeating(half, body, subhead, length=8)
+                ):
                     return _cap_sentence(half, 72)
-        if 18 <= len(title_clean) <= 56 and _norm_text(title_clean) not in used and _non_repeating(title_clean, subhead, body, length=8):
+        if (
+            18 <= len(title_clean) <= 56
+            and _norm_text(title_clean) not in used
+            and _non_repeating(title_clean, subhead, body, length=8)
+        ):
             return _cap_sentence(title_clean, 72)
 
     core = _polish_headline(title_clean) or "阅读"
-    core_norm = _norm_text(core)
+    _norm_text(core)
     core_candidates = [core]
     if title_clean and len(title_clean) >= 8:
         tail = title_clean[-6:].strip(_PUNCT)
@@ -349,7 +414,9 @@ def _recipe_hint(intent: str) -> str:
     }.get(intent, "M03")
 
 
-def build_card_copies(source: dict, insights: list[dict], epilogue: dict | None = None, visual_briefs: list[dict] | None = None) -> list[dict]:
+def build_card_copies(
+    source: dict, insights: list[dict], epilogue: dict | None = None, visual_briefs: list[dict] | None = None
+) -> list[dict]:
     copies: list[dict] = []
     used_pullquotes: set[str] = set()
     for offset, insight in enumerate(insights, start=1):
@@ -362,31 +429,63 @@ def build_card_copies(source: dict, insights: list[dict], epilogue: dict | None 
         body = " ".join(body_parts[:6]) or raw_body or subhead
         body = _cap_sentence(body, 360)
         subhead = _cap_sentence(subhead, 96)
-        point_pool = _unique_sentences([subhead, body, raw_body, raw_title], limit=7)
+        _unique_sentences([subhead, body, raw_body, raw_title], limit=7)
         phrase_pool = _phrase_points(raw_title, raw_body, limit=12)
-        pullquote = _make_pullquote(raw_title, raw_body, body, subhead, used=used_pullquotes, body_parts=body_parts)
+        pullquote = _make_pullquote(
+            raw_title, raw_body, body, subhead, used=used_pullquotes, body_parts=body_parts
+        )
         if pullquote:
             used_pullquotes.add(_norm_text(pullquote))
-        body_sentences = [s for s in _sentences(body, limit=8) if _non_repeating(s, headline, length=4) and _non_repeating(s, subhead, length=4)]
-        raw_body_sentences = [s for s in _sentences(raw_body, limit=8) if _non_repeating(s, headline, length=4) and _non_repeating(s, subhead, length=4)]
-        subhead_fragments = [s for s in _split_subhead(subhead) if _non_repeating(s, headline, length=4) and _non_repeating(s, pullquote, length=8)]
+        body_sentences = [
+            s
+            for s in _sentences(body, limit=8)
+            if _non_repeating(s, headline, length=4) and _non_repeating(s, subhead, length=4)
+        ]
+        raw_body_sentences = [
+            s
+            for s in _sentences(raw_body, limit=8)
+            if _non_repeating(s, headline, length=4) and _non_repeating(s, subhead, length=4)
+        ]
+        subhead_fragments = [
+            s
+            for s in _split_subhead(subhead)
+            if _non_repeating(s, headline, length=4) and _non_repeating(s, pullquote, length=8)
+        ]
         # 若 subhead 已被拆为多片，候选中用碎片替掉完整 subhead，避免 dedupe 把碎片吃掉。
         subhead_for_pool = subhead_fragments if len(subhead_fragments) >= 2 else [subhead]
         # Allow small overlap with pullquote (4 chars) so adjacent sentences survive dedupe.
         points = _dedupe_near_overlap(
-            [p for p in _unique_sentences([*subhead_for_pool, *phrase_pool, *body_sentences, *raw_body_sentences], limit=24)
-             if _non_repeating(p, headline, length=4) and _non_repeating(p, pullquote, length=8)],
+            [
+                p
+                for p in _unique_sentences(
+                    [*subhead_for_pool, *phrase_pool, *body_sentences, *raw_body_sentences], limit=24
+                )
+                if _non_repeating(p, headline, length=4) and _non_repeating(p, pullquote, length=8)
+            ],
             window=4,
         )[:6]
-        detail_pool = [item for item in _unique_sentences([raw_body, raw_title, *phrase_pool, *raw_body_sentences, *body_sentences], limit=18)
-                       if _non_repeating(item, subhead, length=10) and _non_repeating(item, pullquote, length=8) and _non_repeating(item, headline, length=4)]
+        detail_pool = [
+            item
+            for item in _unique_sentences(
+                [raw_body, raw_title, *phrase_pool, *raw_body_sentences, *body_sentences], limit=18
+            )
+            if _non_repeating(item, subhead, length=10)
+            and _non_repeating(item, pullquote, length=8)
+            and _non_repeating(item, headline, length=4)
+        ]
         # 追加 subhead 碎片作为细节锚点（碎片天然与 subhead 重叠，但不应被原 filter 误杀）。
         if subhead_fragments:
             detail_pool.extend([f for f in subhead_fragments if f not in detail_pool])
         details = _dedupe_near_overlap(detail_pool, window=6)[:6]
         payload_chars = len(_norm_text(" ".join([headline, subhead, body, pullquote, *points, *details])))
         qa_flags = _qa_flags(payload_chars, points, details, pullquote)
-        density = "high" if payload_chars >= 260 and len(details) >= 4 else "medium" if payload_chars >= MIN_PAYLOAD_CHARS and len(details) >= MIN_DETAIL_COUNT else "low"
+        density = (
+            "high"
+            if payload_chars >= 260 and len(details) >= 4
+            else (
+                "medium" if payload_chars >= MIN_PAYLOAD_CHARS and len(details) >= MIN_DETAIL_COUNT else "low"
+            )
+        )
         intent = _layout_intent(raw_title, raw_body)
         copies.append(
             {

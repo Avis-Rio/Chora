@@ -24,8 +24,12 @@ from generate_cover._infra import STYLES_DIR, call_gemini_text
 # Styles explicitly excluded from automatic selection (mostly cute/cartoon
 # styles that don't fit the editorial aesthetic).
 _EXCLUDED_STYLES = [
-    "blueprint", "watercolor", "flat-doodle",
-    "pixel-art", "fantasy-animation", "playful",
+    "blueprint",
+    "watercolor",
+    "flat-doodle",
+    "pixel-art",
+    "fantasy-animation",
+    "playful",
 ]
 
 
@@ -93,18 +97,18 @@ Return ONLY a valid JSON object. Do not include any markdown formatting, code bl
         try:
             json_str = response
             if "```json" in json_str:
-                match = re.search(r'```json\n(.*?)\n```', json_str, re.DOTALL)
+                match = re.search(r"```json\n(.*?)\n```", json_str, re.DOTALL)
                 if match:
                     json_str = match.group(1)
             elif "```" in json_str:
-                match = re.search(r'```\n(.*?)\n```', json_str, re.DOTALL)
+                match = re.search(r"```\n(.*?)\n```", json_str, re.DOTALL)
                 if match:
                     json_str = match.group(1)
 
-            start = json_str.find('{')
-            end = json_str.rfind('}')
+            start = json_str.find("{")
+            end = json_str.rfind("}")
             if start != -1 and end != -1:
-                json_str = json_str[start:end + 1]
+                json_str = json_str[start : end + 1]
 
             data = json.loads(json_str)
             return data.get("selected_style"), data.get("selected_type")
@@ -125,7 +129,7 @@ def get_style_content(style_name):
         return None
 
     try:
-        with open(style_path, 'r', encoding='utf-8') as f:
+        with open(style_path, "r", encoding="utf-8") as f:
             return f.read()
     except Exception as e:
         print(f"Error reading style file: {e}")
@@ -142,7 +146,7 @@ def get_random_style():
         return None, None
     selected_file = random.choice(style_files)
     style_name = os.path.basename(selected_file).replace(".md", "")
-    with open(selected_file, 'r', encoding='utf-8') as f:
+    with open(selected_file, "r", encoding="utf-8") as f:
         content = f.read()
     return style_name, content
 
@@ -156,13 +160,13 @@ def parse_style_content(content):
     current_section = "General"
     sections[current_section] = []
 
-    for line in content.split('\n'):
+    for line in content.split("\n"):
         line = line.strip()
         if not line:
             continue
 
-        if line.startswith('## '):
-            current_section = line.replace('## ', '').strip()
+        if line.startswith("## "):
+            current_section = line.replace("## ", "").strip()
             sections[current_section] = []
         else:
             sections[current_section].append(line)

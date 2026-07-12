@@ -7,7 +7,6 @@ from typing import Any
 from distribution_pipeline.renderers.guizang.content_allocator import norm_text, visible_text_nodes
 from distribution_pipeline.renderers.guizang.template_loader import vendor_path
 
-
 DEPENDENCY_REASON = "Guizang validator requires Node.js and Playwright."
 SANDBOX_REASON = "Guizang validator requires permission to launch a browser process."
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -20,7 +19,9 @@ SCAFFOLD_LABELS = {"注记", "脉络", "张力", "信号", "判断", "余波", "
 
 
 def _poster_sections(markup: str) -> list[tuple[str, str]]:
-    matches = list(re.finditer(r"<section\b(?P<attrs>[^>]*)>(?P<body>.*?)</section>", markup, flags=re.I | re.S))
+    matches = list(
+        re.finditer(r"<section\b(?P<attrs>[^>]*)>(?P<body>.*?)</section>", markup, flags=re.I | re.S)
+    )
     if not matches:
         return [("document", markup)]
 
@@ -99,11 +100,17 @@ def _payload_density_lines(markup: str) -> list[str]:
     for section_id, section in _poster_sections(markup):
         if "role-insight" not in section and 'data-role="insight"' not in section:
             continue
-        nodes = [node for node in visible_text_nodes(section) if norm_text(node) not in {norm_text(label) for label in SCAFFOLD_LABELS}]
+        nodes = [
+            node
+            for node in visible_text_nodes(section)
+            if norm_text(node) not in {norm_text(label) for label in SCAFFOLD_LABELS}
+        ]
         payload = norm_text("".join(nodes))
         semantic_blocks = len([node for node in nodes if len(norm_text(node)) >= 8])
         if len(payload) < 120 or semantic_blocks < 3:
-            lines.append(f"FAIL R15 insufficient visible payload in {section_id}: chars={len(payload)} blocks={semantic_blocks}")
+            lines.append(
+                f"FAIL R15 insufficient visible payload in {section_id}: chars={len(payload)} blocks={semantic_blocks}"
+            )
     return lines or ["PASS R15 insight cards carry enough visible payload"]
 
 
@@ -131,12 +138,16 @@ def _workflow_contract_lines(markup: str, strict: bool = False) -> list[str]:
             if payload_chars is not None and payload_chars < 120:
                 lines.append(f"FAIL R16 workflow payload too sparse in {section_id}: chars={payload_chars}")
             if detail_count is not None and detail_count < 2:
-                lines.append(f"FAIL R16 workflow detail count too low in {section_id}: details={detail_count}")
+                lines.append(
+                    f"FAIL R16 workflow detail count too low in {section_id}: details={detail_count}"
+                )
         if qa_flags:
             severity = "FAIL" if strict else "WARN"
             lines.append(f"{severity} R16 workflow qa flags in {section_id}: {','.join(qa_flags)}")
         if recipe in {"M16", "S08"} and "subject map:" not in section:
-            lines.append(f"FAIL R16 text-on-image recipe lacks local subject map in {section_id}: recipe={recipe}")
+            lines.append(
+                f"FAIL R16 text-on-image recipe lacks local subject map in {section_id}: recipe={recipe}"
+            )
     return lines or ["PASS R16 workflow copy/planner contract satisfied"]
 
 
@@ -144,7 +155,9 @@ def _output_artifact_lines(target_dir: Path, strict: bool = False) -> list[str]:
     target_dir = Path(target_dir)
     output_dir = target_dir / "output"
     pngs = sorted(output_dir.glob("*.png")) if output_dir.exists() else []
-    thumbnails = sorted((output_dir / "thumbnails").glob("*.png")) if (output_dir / "thumbnails").exists() else []
+    thumbnails = (
+        sorted((output_dir / "thumbnails").glob("*.png")) if (output_dir / "thumbnails").exists() else []
+    )
     if not strict:
         return ["PASS R17 strict artifact gate not requested"]
     lines = []
@@ -155,7 +168,9 @@ def _output_artifact_lines(target_dir: Path, strict: bool = False) -> list[str]:
     if not thumbnails:
         lines.append("FAIL R17 no 360px thumbnail files found")
     if not lines:
-        lines.append(f"PASS R17 exported PNG and thumbnail artifacts present: png={len(pngs)} thumbnails={len(thumbnails)}")
+        lines.append(
+            f"PASS R17 exported PNG and thumbnail artifacts present: png={len(pngs)} thumbnails={len(thumbnails)}"
+        )
     return lines
 
 
@@ -204,7 +219,11 @@ def review_static_guizang_html(target_dir: Path, mode: str = "editorial", strict
     lines.extend(_output_artifact_lines(target_dir, strict=strict))
 
     if mode == "swiss" and 'data-metric-source="proxy"' in markup:
-        lines.append("FAIL R13 Swiss proxy metric scales are not publishable in strict mode" if strict else "PASS R13 Swiss proxy metric scales are explicitly labelled")
+        lines.append(
+            "FAIL R13 Swiss proxy metric scales are not publishable in strict mode"
+            if strict
+            else "PASS R13 Swiss proxy metric scales are explicitly labelled"
+        )
     if mode == "swiss":
         lines.extend(_proxy_placeholder_lines(markup))
 
@@ -232,7 +251,9 @@ def parse_validator_output(output: str) -> dict:
     }
 
 
-def _merge_validator_status(browser_status: dict, static_status: dict, strict: bool = False, browser_required: bool = False) -> dict:
+def _merge_validator_status(
+    browser_status: dict, static_status: dict, strict: bool = False, browser_required: bool = False
+) -> dict:
     merged = dict(browser_status)
     merged["pass_count"] = browser_status.get("pass_count", 0) + static_status.get("pass_count", 0)
     merged["warn_count"] = browser_status.get("warn_count", 0) + static_status.get("warn_count", 0)
@@ -245,7 +266,9 @@ def _merge_validator_status(browser_status: dict, static_status: dict, strict: b
     else:
         merged["status"] = "pass"
     merged["static_review"] = static_status
-    merged["quality_gate"] = quality_gate_from_review(merged, strict=strict, browser_required=browser_required)
+    merged["quality_gate"] = quality_gate_from_review(
+        merged, strict=strict, browser_required=browser_required
+    )
     return merged
 
 
@@ -282,15 +305,38 @@ def _node_env() -> dict[str, str]:
     return env
 
 
-def quality_gate_from_review(review: dict[str, Any], strict: bool = False, browser_required: bool = False) -> dict:
+def quality_gate_from_review(
+    review: dict[str, Any], strict: bool = False, browser_required: bool = False
+) -> dict:
     reasons = []
     status = review.get("status", "unknown")
     if status == "skipped" and browser_required:
-        reasons.append({"code": "R18", "severity": "fail", "layer": "validator_env", "message": review.get("reason") or "browser validator skipped"})
+        reasons.append(
+            {
+                "code": "R18",
+                "severity": "fail",
+                "layer": "validator_env",
+                "message": review.get("reason") or "browser validator skipped",
+            }
+        )
     if review.get("fail_count", 0) > 0:
-        reasons.append({"code": "R0", "severity": "fail", "layer": "validator", "message": f"validator reported {review.get('fail_count')} failures"})
+        reasons.append(
+            {
+                "code": "R0",
+                "severity": "fail",
+                "layer": "validator",
+                "message": f"validator reported {review.get('fail_count')} failures",
+            }
+        )
     if strict and review.get("warn_count", 0) > 0:
-        reasons.append({"code": "R0", "severity": "fail", "layer": "validator", "message": f"strict mode blocks {review.get('warn_count')} warnings"})
+        reasons.append(
+            {
+                "code": "R0",
+                "severity": "fail",
+                "layer": "validator",
+                "message": f"strict mode blocks {review.get('warn_count')} warnings",
+            }
+        )
     publishable = not reasons and status == "pass"
     return {
         "strict": bool(strict),
@@ -301,7 +347,9 @@ def quality_gate_from_review(review: dict[str, Any], strict: bool = False, brows
     }
 
 
-def run_guizang_validator(target_dir: Path, mode: str = "editorial", strict: bool = False, browser_required: bool = False) -> dict:
+def run_guizang_validator(
+    target_dir: Path, mode: str = "editorial", strict: bool = False, browser_required: bool = False
+) -> dict:
     script = vendor_path("validate-social-deck.mjs")
     args = ["node", str(script), str(Path(target_dir)), f"--style={mode}"]
     static_status = review_static_guizang_html(target_dir, mode=mode, strict=strict)
@@ -309,7 +357,9 @@ def run_guizang_validator(target_dir: Path, mode: str = "editorial", strict: boo
         result = subprocess.run(args, check=False, capture_output=True, text=True, env=_node_env())
     except FileNotFoundError:
         skipped = {"status": "skipped", "reason": DEPENDENCY_REASON, "static_review": static_status}
-        skipped["quality_gate"] = quality_gate_from_review(skipped, strict=strict, browser_required=browser_required)
+        skipped["quality_gate"] = quality_gate_from_review(
+            skipped, strict=strict, browser_required=browser_required
+        )
         return skipped
 
     stdout = result.stdout or ""
@@ -324,7 +374,9 @@ def run_guizang_validator(target_dir: Path, mode: str = "editorial", strict: boo
             "stderr": stderr,
             "returncode": result.returncode,
         }
-        skipped["quality_gate"] = quality_gate_from_review(skipped, strict=strict, browser_required=browser_required)
+        skipped["quality_gate"] = quality_gate_from_review(
+            skipped, strict=strict, browser_required=browser_required
+        )
         return skipped
     if _is_browser_process_blocked(combined):
         skipped = {
@@ -335,7 +387,9 @@ def run_guizang_validator(target_dir: Path, mode: str = "editorial", strict: boo
             "stderr": stderr,
             "returncode": result.returncode,
         }
-        skipped["quality_gate"] = quality_gate_from_review(skipped, strict=strict, browser_required=browser_required)
+        skipped["quality_gate"] = quality_gate_from_review(
+            skipped, strict=strict, browser_required=browser_required
+        )
         return skipped
 
     status = parse_validator_output(combined)

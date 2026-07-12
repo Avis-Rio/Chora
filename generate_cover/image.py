@@ -38,27 +38,16 @@ def generate_cover(prompt, output_path, title=None):
         bool: 是否成功生成
     """
     config = load_config()
-    api_config = config['api_keys']['gemini']
+    api_config = config["api_keys"]["gemini"]
 
-    base_url = api_config['base_url']
-    api_key = api_config['api_key']
+    base_url = api_config["base_url"]
+    api_key = api_config["api_key"]
 
-    headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {api_key}'
-    }
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
 
     payload = {
-        "contents": [{
-            "role": "user",
-            "parts": [{"text": prompt}]
-        }],
-        "generationConfig": {
-            "temperature": 0.9,
-            "topK": 40,
-            "topP": 0.95,
-            "maxOutputTokens": 8192
-        }
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.9, "topK": 40, "topP": 0.95, "maxOutputTokens": 8192},
     }
 
     max_retries = 5
@@ -79,7 +68,7 @@ def generate_cover(prompt, output_path, title=None):
             print(f"   Response status: {response.status_code}")
 
             if response.status_code == 429:
-                wait_time = retry_delay * (2 ** attempt)
+                wait_time = retry_delay * (2**attempt)
                 print(f"   ⚠️ Rate limit hit (429). Retrying in {wait_time}s...")
                 time.sleep(wait_time)
                 continue
@@ -87,7 +76,7 @@ def generate_cover(prompt, output_path, title=None):
             if response.status_code != 200:
                 print(f"   ❌ API error: {response.text[:300]}")
                 if response.status_code in [500, 502, 503, 504]:
-                    wait_time = retry_delay * (2 ** attempt)
+                    wait_time = retry_delay * (2**attempt)
                     print(f"   ⚠️ Server error ({response.status_code}). Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                     continue
@@ -95,32 +84,32 @@ def generate_cover(prompt, output_path, title=None):
 
             result = response.json()
 
-            if 'candidates' in result and result['candidates']:
-                candidate = result['candidates'][0]
-                if 'content' in candidate and 'parts' in candidate['content']:
-                    parts = candidate['content']['parts']
+            if "candidates" in result and result["candidates"]:
+                candidate = result["candidates"][0]
+                if "content" in candidate and "parts" in candidate["content"]:
+                    parts = candidate["content"]["parts"]
                     for part in parts:
-                        inline_data = part.get('inlineData') or part.get('inline_data')
+                        inline_data = part.get("inlineData") or part.get("inline_data")
                         if inline_data:
-                            image_data = base64.b64decode(inline_data['data'])
+                            image_data = base64.b64decode(inline_data["data"])
 
                             dirname = os.path.dirname(output_path)
                             if dirname:
                                 os.makedirs(dirname, exist_ok=True)
 
-                            with open(output_path, 'wb') as f:
+                            with open(output_path, "wb") as f:
                                 f.write(image_data)
 
                             file_size_kb = len(image_data) / 1024
                             print(f"   ✅ Cover saved: {output_path} ({file_size_kb:.1f} KB)")
                             return True
-                        elif 'text' in part:
-                            print(f"   ⚠️ Model returned text instead of image")
+                        elif "text" in part:
+                            print("   ⚠️ Model returned text instead of image")
                             print(f"   Text: {part['text'][:200]}...")
 
             print("   ❌ No image data found in response")
             if attempt < max_retries - 1:
-                wait_time = retry_delay * (2 ** attempt)
+                wait_time = retry_delay * (2**attempt)
                 print(f"   Retrying in {wait_time}s...")
                 time.sleep(wait_time)
                 continue
@@ -129,7 +118,7 @@ def generate_cover(prompt, output_path, title=None):
         except (requests.exceptions.RequestException, Exception) as e:
             print(f"   ❌ Error generating image: {e}")
             if attempt < max_retries - 1:
-                wait_time = retry_delay * (2 ** attempt)
+                wait_time = retry_delay * (2**attempt)
                 print(f"   Retrying in {wait_time}s...")
                 time.sleep(wait_time)
                 continue

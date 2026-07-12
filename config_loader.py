@@ -10,11 +10,13 @@
 """
 
 import os
+
 import yaml
 
 # 自动加载 .env 文件（如果存在）
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
@@ -23,11 +25,11 @@ except ImportError:
 def load_yaml(path):
     if not os.path.exists(path):
         return None
-    with open(path, 'r', encoding='utf-8') as f:
+    with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
-def load_sources_config(path='config/sources.yaml'):
+def load_sources_config(path="config/sources.yaml"):
     """
     加载 sources.yaml，并用环境变量覆盖 api_keys。
 
@@ -44,40 +46,40 @@ def load_sources_config(path='config/sources.yaml'):
     if config is None:
         return None
 
-    if 'api_keys' not in config:
-        config['api_keys'] = {}
+    if "api_keys" not in config:
+        config["api_keys"] = {}
 
     # Groq
-    groq_key = os.getenv('GROQ_API_KEY')
+    groq_key = os.getenv("GROQ_API_KEY")
     if groq_key:
-        config['api_keys']['groq'] = groq_key
+        config["api_keys"]["groq"] = groq_key
 
     # Gemini
-    gemini_cfg = config['api_keys'].get('gemini', {})
-    if os.getenv('GEMINI_API_KEY'):
-        gemini_cfg['api_key'] = os.getenv('GEMINI_API_KEY')
-    if os.getenv('GEMINI_BASE_URL'):
-        gemini_cfg['base_url'] = os.getenv('GEMINI_BASE_URL')
-    if os.getenv('GEMINI_MODEL'):
-        gemini_cfg['model'] = os.getenv('GEMINI_MODEL')
+    gemini_cfg = config["api_keys"].get("gemini", {})
+    if os.getenv("GEMINI_API_KEY"):
+        gemini_cfg["api_key"] = os.getenv("GEMINI_API_KEY")
+    if os.getenv("GEMINI_BASE_URL"):
+        gemini_cfg["base_url"] = os.getenv("GEMINI_BASE_URL")
+    if os.getenv("GEMINI_MODEL"):
+        gemini_cfg["model"] = os.getenv("GEMINI_MODEL")
     if gemini_cfg:
-        config['api_keys']['gemini'] = gemini_cfg
+        config["api_keys"]["gemini"] = gemini_cfg
 
     # LLM (OpenAI-compatible)
-    llm_cfg = config['api_keys'].get('llm', {})
-    if os.getenv('LLM_API_KEY'):
-        llm_cfg['api_key'] = os.getenv('LLM_API_KEY')
-    if os.getenv('LLM_BASE_URL'):
-        llm_cfg['base_url'] = os.getenv('LLM_BASE_URL')
-    if os.getenv('LLM_MODEL'):
-        llm_cfg['model'] = os.getenv('LLM_MODEL')
+    llm_cfg = config["api_keys"].get("llm", {})
+    if os.getenv("LLM_API_KEY"):
+        llm_cfg["api_key"] = os.getenv("LLM_API_KEY")
+    if os.getenv("LLM_BASE_URL"):
+        llm_cfg["base_url"] = os.getenv("LLM_BASE_URL")
+    if os.getenv("LLM_MODEL"):
+        llm_cfg["model"] = os.getenv("LLM_MODEL")
     if llm_cfg:
-        config['api_keys']['llm'] = llm_cfg
+        config["api_keys"]["llm"] = llm_cfg
 
     return config
 
 
-def load_feishu_config(path='config/feishu.yaml'):
+def load_feishu_config(path="config/feishu.yaml"):
     """
     加载 feishu.yaml，并用环境变量覆盖凭证。
 
@@ -91,21 +93,21 @@ def load_feishu_config(path='config/feishu.yaml'):
     if config is None:
         return None
 
-    if 'feishu' not in config:
-        config['feishu'] = {}
+    if "feishu" not in config:
+        config["feishu"] = {}
 
-    feishu_cfg = config['feishu']
-    if os.getenv('FEISHU_APP_ID'):
-        feishu_cfg['app_id'] = os.getenv('FEISHU_APP_ID')
-    if os.getenv('FEISHU_APP_SECRET'):
-        feishu_cfg['app_secret'] = os.getenv('FEISHU_APP_SECRET')
-    if os.getenv('FEISHU_BASE_ID'):
-        feishu_cfg['base_id'] = os.getenv('FEISHU_BASE_ID')
-    if os.getenv('FEISHU_TABLE_ID'):
-        feishu_cfg['table_id'] = os.getenv('FEISHU_TABLE_ID')
+    feishu_cfg = config["feishu"]
+    if os.getenv("FEISHU_APP_ID"):
+        feishu_cfg["app_id"] = os.getenv("FEISHU_APP_ID")
+    if os.getenv("FEISHU_APP_SECRET"):
+        feishu_cfg["app_secret"] = os.getenv("FEISHU_APP_SECRET")
+    if os.getenv("FEISHU_BASE_ID"):
+        feishu_cfg["base_id"] = os.getenv("FEISHU_BASE_ID")
+    if os.getenv("FEISHU_TABLE_ID"):
+        feishu_cfg["table_id"] = os.getenv("FEISHU_TABLE_ID")
 
-    if 'vercel' not in config:
-        config['vercel'] = {}
+    if "vercel" not in config:
+        config["vercel"] = {}
 
     return config
 

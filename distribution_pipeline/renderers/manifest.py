@@ -9,7 +9,9 @@ def _relative(path: Path, root: Path) -> str:
     return str(path.relative_to(root))
 
 
-def build_manifest(package_dir: Path, source_content_dir: str | None = None, review_status: dict | None = None) -> dict:
+def build_manifest(
+    package_dir: Path, source_content_dir: str | None = None, review_status: dict | None = None
+) -> dict:
     package_dir = Path(package_dir)
     platforms = {}
 

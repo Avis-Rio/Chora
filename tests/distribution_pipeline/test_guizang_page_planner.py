@@ -1,8 +1,7 @@
 from pathlib import Path
 
 from distribution_pipeline.extractors.package_builder import build_content_package
-from distribution_pipeline.renderers.guizang.page_planner import build_xhs_pages
-from distribution_pipeline.renderers.guizang.page_planner import content_profile
+from distribution_pipeline.renderers.guizang.page_planner import build_xhs_pages, content_profile
 
 
 def test_build_xhs_pages_uses_cover_insights_and_closing(tmp_path):
@@ -96,9 +95,7 @@ def test_build_xhs_pages_swiss_routes_specific_recipe_signals():
 
     pages = build_xhs_pages(package, mode="swiss")
     recipes_by_insight = {
-        page.get("insight_index"): page["recipe"]
-        for page in pages
-        if page["role"] == "insight"
+        page.get("insight_index"): page["recipe"] for page in pages if page["role"] == "insight"
     }
 
     assert recipes_by_insight[1] == "S02"
@@ -197,7 +194,9 @@ def test_build_xhs_pages_resolves_relative_image_path_for_subject_map(tmp_path, 
 def test_build_xhs_pages_turns_long_cover_title_into_growth_hook(tmp_path):
     content = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
     package = build_content_package(content, tmp_path / "pkg")
-    package["source"]["title"] = "谷歌AI的14年、Gemini翻身之战，与视觉理解模型：专访DeepMind前核心科学家Andrew"
+    package["source"][
+        "title"
+    ] = "谷歌AI的14年、Gemini翻身之战，与视觉理解模型：专访DeepMind前核心科学家Andrew"
 
     pages = build_xhs_pages(package, max_cards=6, mode="editorial")
 
@@ -230,8 +229,7 @@ def test_build_xhs_pages_matches_evidence_by_insight_index_over_old_page_id():
     package = {
         "source": {"title": "How To Grow An Audience If You Have 0 Followers", "channel": "Dan Koe"},
         "insights": [
-            {"index": index, "title": f"洞察{index}", "body": f"解释{index}。"}
-            for index in range(1, 9)
+            {"index": index, "title": f"洞察{index}", "body": f"解释{index}。"} for index in range(1, 9)
         ],
         "philosophical_epilogue": {"title": "哲思结语", "body": "行动现在发生。"},
         "image_assets": {
@@ -261,18 +259,14 @@ def test_build_xhs_pages_matches_evidence_by_insight_index_over_old_page_id():
 
     assert page_for_insight_7["id"] == "xhs-07"
     assert page_for_insight_7["image"]["src"] == "assets/images/insight-7.png"
-    assert all(
-        (page.get("image") or {}).get("src") != "assets/images/old-xhs-07.png"
-        for page in pages
-    )
+    assert all((page.get("image") or {}).get("src") != "assets/images/old-xhs-07.png" for page in pages)
 
 
 def test_build_xhs_pages_auto_uses_growth_depth_deck_and_keeps_philosophy():
     package = {
         "source": {"title": "谷歌AI的14年", "channel": "硅谷101"},
         "insights": [
-            {"index": index, "title": f"洞察{index}", "body": f"完整解释{index}。"}
-            for index in range(1, 11)
+            {"index": index, "title": f"洞察{index}", "body": f"完整解释{index}。"} for index in range(1, 11)
         ],
         "philosophical_epilogue": {
             "title": "时间不可逆",

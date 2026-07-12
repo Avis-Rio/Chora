@@ -7,7 +7,6 @@ from distribution_pipeline.renderers.guizang.screenshot_treatment import (
     render_screenshot_frame,
 )
 
-
 # -----------------------------------------------------------------------------
 # 1. detect_screenshot：关键词命中
 # -----------------------------------------------------------------------------
@@ -34,7 +33,9 @@ def test_detect_screenshot_hits_on_terminal():
 
 
 def test_detect_screenshot_hits_on_browser_capture():
-    assert detect_screenshot({"alt": "browser screenshot of the dashboard", "filename": "capture.png"}) is True
+    assert (
+        detect_screenshot({"alt": "browser screenshot of the dashboard", "filename": "capture.png"}) is True
+    )
 
 
 def test_detect_screenshot_hits_on_chinese_hint():
@@ -56,11 +57,15 @@ def test_detect_screenshot_rejects_portrait_over_screenshot_string():
 
 
 def test_detect_screenshot_rejects_food_photography():
-    assert detect_screenshot({"caption": "food photography for magazine cover", "asset_id": "dish-01"}) is False
+    assert (
+        detect_screenshot({"caption": "food photography for magazine cover", "asset_id": "dish-01"}) is False
+    )
 
 
 def test_detect_screenshot_rejects_landscape():
-    assert detect_screenshot({"caption": "scenery landscape of mountain", "filename": "mountain.jpg"}) is False
+    assert (
+        detect_screenshot({"caption": "scenery landscape of mountain", "filename": "mountain.jpg"}) is False
+    )
 
 
 def test_detect_screenshot_rejects_3d_render():
@@ -177,7 +182,7 @@ def test_render_screenshot_frame_emits_frame_shot_with_all_classes():
     assert "shadow-none" in html
     assert "bg-grey-1" in html
     assert "inset-sub" in html
-    assert "src=\"assets/images/dashboard.png\"" in html
+    assert 'src="assets/images/dashboard.png"' in html
     assert "Linear dashboard" in html
     assert "device-" not in html  # 非手机
 
@@ -246,7 +251,9 @@ def test_render_image_frame_screenshot_uses_frame_shot():
         "screenshot": True,  # 显式标 True
     }
     page = {"role": "evidence"}
-    html = render_image_frame(image, page, mode="swiss", theme="ikb", fig_label="FIG. 01", default_ratio="r-4x3")
+    html = render_image_frame(
+        image, page, mode="swiss", theme="ikb", fig_label="FIG. 01", default_ratio="r-4x3"
+    )
 
     assert "frame-shot" in html
     assert "frame-img" not in html
@@ -261,7 +268,9 @@ def test_render_image_frame_auto_detects_screenshot_from_captions():
         # 未显式标 screenshot
     }
     page = {"role": "evidence"}
-    html = render_image_frame(image, page, mode="swiss", theme="ikb", fig_label="FIG. 01", default_ratio="r-4x3")
+    html = render_image_frame(
+        image, page, mode="swiss", theme="ikb", fig_label="FIG. 01", default_ratio="r-4x3"
+    )
 
     assert "frame-shot" in html
     assert "r-16x10" in html

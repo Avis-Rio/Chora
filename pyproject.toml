@@ -30,3 +30,66 @@ markers = [
 # This project is consumed via Skills, not installed via pip. We only
 # declare package config for tooling (pytest discovery).
 packages = []
+
+[tool.ruff]
+# Chora-wide lint config. Tied to a single tool so contributors only
+# have to install one CLI. Black-compatible line-length (88) keeps
+# both tools in lockstep.
+line-length = 110
+target-version = "py310"
+extend-exclude = [
+    "venv",
+    "node_modules",
+    "content_archive",
+    "distribution",
+    "frontend",
+    ".ruff_cache",
+]
+
+[tool.ruff.lint]
+# Pragmatic default: catch real defects (F, E9), bad practice (E722),
+# style nits (E), and shadowing (F841). We intentionally opt OUT of
+# heavy opinionated rules (B, C4, UP, SIM) so existing code stays
+# readable without forcing massive rewrites in one PR.
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes (undefined, unused, ...)
+    "W",    # pycodestyle warnings
+    "I",    # isort (import order)
+    "E722", # bare except
+]
+ignore = [
+    "E501", # line too long — handled by black (and we have string concat that breaks lines naturally)
+    "E402", # module-import-not-at-top — see per-file-ignores below
+    "F401", # unused-import — sometimes noqa'd at module level for re-export
+    "F841", # unused-variable — disable; CLI scripts often assign then print
+]
+
+[tool.ruff.lint.per-file-ignores]
+# These scripts use `sys.path.insert(0, '.')` followed by imports of
+# repo-local modules; that's intentional so a `python3 process_video.py`
+# invocation resolves sibling modules without a package install.
+"process_video.py"     = ["E402"]
+"process_podcast.py"   = ["E402", "E501"]
+"youtube_service.py"   = ["E402", "E501"]
+"scripts/*.py"         = ["E402"]
+
+# Tests are allowed to re-export imports for clarity in fixture building.
+"tests/**/*.py"        = ["F401", "F811"]
+
+[tool.black]
+# Black is the project formatter; config kept here so a single tool
+# (`pyproject.toml`) defines formatting and lint together.
+line-length = 110
+target-version = ["py310"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    venv
+    | node_modules
+    | content_archive
+    | distribution
+    | frontend
+    | \.ruff_cache
+)/
+'''

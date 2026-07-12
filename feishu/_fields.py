@@ -59,11 +59,17 @@ class FieldMixin:
         """
         if available_fields is None:
             available_fields = {}
-        names = set(available_fields.keys()) if isinstance(available_fields, dict) else set(available_fields or [])
+        names = (
+            set(available_fields.keys())
+            if isinstance(available_fields, dict)
+            else set(available_fields or [])
+        )
         aliases = self.field_aliases.get(internal_key, [internal_key])
         for alias in aliases:
             if alias in names:
-                field_type = available_fields.get(alias, 'text') if isinstance(available_fields, dict) else 'text'
+                field_type = (
+                    available_fields.get(alias, "text") if isinstance(available_fields, dict) else "text"
+                )
                 return alias, field_type
         return None, None
 
@@ -87,24 +93,24 @@ class FieldMixin:
         if value is None or value == "":
             return None
 
-        if field_type == 'multi_select':
+        if field_type == "multi_select":
             if isinstance(value, list):
                 return [str(v) for v in value]
             return [str(value)]
 
-        if field_type == 'single_select':
+        if field_type == "single_select":
             return str(value)
 
-        if field_type == 'url':
+        if field_type == "url":
             if isinstance(value, dict):
                 return value
-            return {'link': str(value), 'text': str(value)}
+            return {"link": str(value), "text": str(value)}
 
-        if field_type == 'attachment':
+        if field_type == "attachment":
             tokens = value if isinstance(value, list) else [value]
-            return [{'file_token': str(t)} for t in tokens if t]
+            return [{"file_token": str(t)} for t in tokens if t]
 
-        if field_type == 'date':
+        if field_type == "date":
             if isinstance(value, (int, float)):
                 # Already ms-since-epoch.
                 return int(value)
@@ -112,16 +118,17 @@ class FieldMixin:
                 # Try parsing as ISO date.
                 try:
                     from datetime import datetime
-                    dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+                    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
                     return int(dt.timestamp() * 1000)
                 except Exception:
                     return value  # Pass through; Feishu may still parse it.
             return value
 
-        if field_type == 'checkbox':
+        if field_type == "checkbox":
             return bool(value)
 
-        if field_type == 'number':
+        if field_type == "number":
             return float(value) if not isinstance(value, (int, float)) else value
 
         # Default: text
@@ -155,13 +162,13 @@ class FieldMixin:
         candidates = dict(data)
 
         # Platform name mapping: lowercase internal → displayed label.
-        platform_map = {'youtube': 'YouTube', 'xiaoyuzhou': '小宇宙'}
-        if candidates.get('platform'):
-            candidates['platform'] = platform_map.get(candidates['platform'], candidates['platform'])
+        platform_map = {"youtube": "YouTube", "xiaoyuzhou": "小宇宙"}
+        if candidates.get("platform"):
+            candidates["platform"] = platform_map.get(candidates["platform"], candidates["platform"])
 
         mapped = {}
         for internal_key, raw_value in candidates.items():
-            if raw_value is None or raw_value == '':
+            if raw_value is None or raw_value == "":
                 continue
             field_name, field_type = self._resolve_field_name(internal_key, available_fields)
             if not field_name:
@@ -169,11 +176,11 @@ class FieldMixin:
                 # caller can still attempt a write (useful for dry runs/tests).
                 aliases = self.field_aliases.get(internal_key, [internal_key])
                 field_name = aliases[0]
-                field_type = 'text'
+                field_type = "text"
 
             # Cover gets replaced by file_token only when caller explicitly
             # provides one — otherwise we pass the raw ``cover_path`` value.
-            if internal_key == 'cover' and file_token:
+            if internal_key == "cover" and file_token:
                 raw_value = file_token
 
             formatted = self._format_field_value(raw_value, field_type)

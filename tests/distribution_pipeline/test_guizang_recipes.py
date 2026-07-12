@@ -91,8 +91,8 @@ def test_render_evidence_feature_does_not_repeat_lead_in_rows():
     html = render_page_section(page, mode="editorial")
 
     assert html.count("递归自我提升驱使大公司押注编程") == 1
-    assert "ledger-title\">这反而为视觉推理创造窗口。" in html
-    assert "ledger-note\">注记" not in html
+    assert 'ledger-title">这反而为视觉推理创造窗口。' in html
+    assert 'ledger-note">注记' not in html
     assert "注记" not in html
 
 
@@ -509,7 +509,7 @@ def test_render_swiss_closing_embeds_cta_in_final_field_card():
     html = render_page_section(page, mode="swiss")
 
     assert "Takeaway · Ledger" in html
-    assert "<h2 class=\"h-xl\">完整内容见 Chora</h2>" in html
+    assert '<h2 class="h-xl">完整内容见 Chora</h2>' in html
     assert "CHORA ARCHIVE" in html
     assert "archive-mark" in html
     assert "<svg" in html

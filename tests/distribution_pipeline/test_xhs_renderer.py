@@ -1,8 +1,7 @@
 from pathlib import Path
 
 from distribution_pipeline.extractors.package_builder import build_content_package
-from distribution_pipeline.renderers.xhs_renderer import render_xhs_package
-from distribution_pipeline.renderers.xhs_renderer import _build_post_md
+from distribution_pipeline.renderers.xhs_renderer import _build_post_md, render_xhs_package
 
 
 def test_render_xhs_package_writes_html_and_post(tmp_path):
@@ -19,10 +18,7 @@ def test_render_xhs_package_writes_html_and_post(tmp_path):
 
 def test_build_post_md_keeps_all_insights():
     source = {"title": "长文章", "channel": "Chora"}
-    insights = [
-        {"title": f"洞察{index}", "body": f"正文{index}"}
-        for index in range(1, 8)
-    ]
+    insights = [{"title": f"洞察{index}", "body": f"正文{index}"} for index in range(1, 8)]
 
     post = _build_post_md(source, insights)
 

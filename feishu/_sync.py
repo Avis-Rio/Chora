@@ -17,10 +17,8 @@ Key behaviour preserved:
   ``quotes``).
 """
 
-import os
 import json
-import sys
-from datetime import datetime
+import os
 
 
 class SyncMixin:
@@ -29,7 +27,7 @@ class SyncMixin:
     # Key fields that must have data for a record to be considered complete.
     # These are internal keys; they are resolved to actual Feishu field names
     # via field_aliases when checking completeness.
-    REQUIRED_FIELDS = ['title', 'rewritten', 'cover', 'tags', 'publish_date', 'id', 'quotes']
+    REQUIRED_FIELDS = ["title", "rewritten", "cover", "tags", "publish_date", "id", "quotes"]
 
     def is_record_complete(self, record):
         """Check if a record has all required fields filled.
@@ -37,7 +35,7 @@ class SyncMixin:
         Uses field aliases to tolerate schema renames.
         Returns tuple: (is_complete, missing_fields)
         """
-        fields = record.get('fields', {})
+        fields = record.get("fields", {})
         missing = []
 
         available_fields = self.get_table_fields()
@@ -59,7 +57,7 @@ class SyncMixin:
 
         return (len(missing) == 0, missing)
 
-    def sync_from_export(self, export_path='content_export.json', force=False):
+    def sync_from_export(self, export_path="content_export.json", force=False):
         """Sync all content from export JSON to Feishu.
 
         Intelligent sync logic:
@@ -75,7 +73,7 @@ class SyncMixin:
             print(f"❌ Export file not found: {export_path}")
             return
 
-        with open(export_path, 'r', encoding='utf-8') as f:
+        with open(export_path, "r", encoding="utf-8") as f:
             items = json.load(f)
 
         # Get available fields from the table
@@ -87,16 +85,16 @@ class SyncMixin:
             print("   ⚠️ Could not get field list, will try all fields")
 
         # Check if cover field exists
-        cover_field = self._resolve_field_name('cover', available_fields)[0]
+        cover_field = self._resolve_field_name("cover", available_fields)[0]
         has_cover_field = bool(cover_field)
 
         # Pre-fetch all records for efficiency
         print("📥 Fetching existing records...")
         all_records = self.list_records(page_size=500)
         records_by_id = {}
-        id_field = self._resolve_field_name('id', available_fields)[0] or '记录ID'
+        id_field = self._resolve_field_name("id", available_fields)[0] or "记录ID"
         for record in all_records:
-            content_id = record.get('fields', {}).get(id_field)
+            content_id = record.get("fields", {}).get(id_field)
             if content_id:
                 records_by_id[content_id] = record
         print(f"   Found {len(records_by_id)} existing records")
@@ -109,8 +107,8 @@ class SyncMixin:
         failed = 0
 
         for item in items:
-            content_id = item.get('id')
-            title = item.get('title', 'Unknown')[:35]
+            content_id = item.get("id")
+            title = item.get("title", "Unknown")[:35]
 
             try:
                 existing = records_by_id.get(content_id)
@@ -134,22 +132,22 @@ class SyncMixin:
                     # Upload cover if missing or force-update. Otherwise reuse
                     # the existing file_token so we don't upload the same image twice.
                     file_token = None
-                    cover_path = item.get('cover_path')
+                    cover_path = item.get("cover_path")
                     needs_cover = (cover_field in missing_fields) or force
 
                     if cover_path and os.path.exists(cover_path) and has_cover_field and needs_cover:
                         file_token = self.upload_image(cover_path)
-                    elif not needs_cover and cover_field and cover_field in existing.get('fields', {}):
-                        cover_obj = existing['fields'][cover_field]
+                    elif not needs_cover and cover_field and cover_field in existing.get("fields", {}):
+                        cover_obj = existing["fields"][cover_field]
                         if cover_obj and isinstance(cover_obj, list) and len(cover_obj) > 0:
-                            file_token = cover_obj[0].get('file_token')
+                            file_token = cover_obj[0].get("file_token")
 
                     # Preserve existing publish status; default True for new records.
-                    published_field = self._resolve_field_name('published', available_fields)[0]
-                    if published_field and published_field in existing.get('fields', {}):
-                        item['published'] = existing['fields'][published_field]
+                    published_field = self._resolve_field_name("published", available_fields)[0]
+                    if published_field and published_field in existing.get("fields", {}):
+                        item["published"] = existing["fields"][published_field]
 
-                    record_id = existing.get('record_id')
+                    record_id = existing.get("record_id")
                     if self.update_record(record_id, item, available_fields, file_token):
                         updated += 1
                     else:
@@ -159,7 +157,7 @@ class SyncMixin:
                     print(f"\n➕ Creating: {title}...")
 
                     file_token = None
-                    cover_path = item.get('cover_path')
+                    cover_path = item.get("cover_path")
                     if cover_path and os.path.exists(cover_path) and has_cover_field:
                         file_token = self.upload_image(cover_path)
 
@@ -173,7 +171,7 @@ class SyncMixin:
                 failed += 1
 
         print(f"\n{'=' * 50}")
-        print(f"✅ Sync complete:")
+        print("✅ Sync complete:")
         print(f"   ➕ Created: {created}")
         print(f"   🔧 Updated: {updated}")
         print(f"   ⏭️  Skipped: {skipped}")

@@ -12,9 +12,9 @@ content_archive 自动清理工具。
     python3 utils/archive_cleanup.py --remove-covers --days 90
 """
 
+import argparse
 import os
 import sys
-import argparse
 from datetime import datetime, timedelta
 
 
@@ -56,8 +56,10 @@ def should_remove_file(filename, remove_covers):
         return True
     if lower.startswith("temp_chunk_") and lower.endswith((".mp3", ".m4a")):
         return True
-    if remove_covers and lower.startswith("cover.") and lower.split(".")[-1] in (
-        "jpg", "jpeg", "png", "webp", "gif"
+    if (
+        remove_covers
+        and lower.startswith("cover.")
+        and lower.split(".")[-1] in ("jpg", "jpeg", "png", "webp", "gif")
     ):
         return True
     return False

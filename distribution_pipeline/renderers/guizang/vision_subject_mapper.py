@@ -25,10 +25,7 @@ import json
 import os
 import re
 import sys
-from html import escape
 from pathlib import Path
-from typing import Iterable
-
 
 VISION_CACHE_FILENAME = ".subject_map_cache.json"
 VISION_DEFAULT_MAX_PER_PACKAGE = 4
@@ -82,6 +79,7 @@ _VISION_PROMPT = """你是一位排版编辑，负责判断一张图是否适合
 # 2. Env 开关
 # -----------------------------------------------------------------------------
 
+
 def vision_disabled() -> bool:
     raw = os.environ.get("CHORA_DISTRIBUTION_VISION_PROVIDER", "none").strip().lower()
     return raw in {"", "none", "off", "false", "0"}
@@ -96,9 +94,7 @@ def vision_concurrency() -> int:
 
 
 def vision_max_per_package() -> int:
-    raw = os.environ.get(
-        "CHORA_DISTRIBUTION_VISION_MAX_PER_PACKAGE", str(VISION_DEFAULT_MAX_PER_PACKAGE)
-    )
+    raw = os.environ.get("CHORA_DISTRIBUTION_VISION_MAX_PER_PACKAGE", str(VISION_DEFAULT_MAX_PER_PACKAGE))
     try:
         return max(0, int(raw))
     except ValueError:
@@ -116,6 +112,7 @@ def vision_timeout() -> int:
 # -----------------------------------------------------------------------------
 # 3. Gemini REST 调用（与戊项 generate_cover.py 同管线，不依赖 generate_cover）
 # -----------------------------------------------------------------------------
+
 
 def _load_gemini_config(config_path: Path | None = None) -> dict:
     repo_root = Path(__file__).resolve().parents[3]
@@ -139,8 +136,12 @@ def _encode_image(image_path: Path) -> tuple[str, str]:
     """返回 (mime_type, base64_data)。"""
     suffix = image_path.suffix.lower()
     mime = {
-        ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-        ".webp": "image/webp", ".gif": "image/gif", ".heic": "image/heic",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".heic": "image/heic",
     }.get(suffix, "image/png")
     data = base64.b64encode(image_path.read_bytes()).decode("ascii")
     return mime, data
@@ -164,13 +165,15 @@ def call_gemini_vision(image_path: Path, prompt: str | None = None) -> str | Non
     api_key = api["api_key"]
     mime, b64 = _encode_image(image_path)
     payload = {
-        "contents": [{
-            "role": "user",
-            "parts": [
-                {"text": prompt or _VISION_PROMPT},
-                {"inline_data": {"mime_type": mime, "data": b64}},
-            ],
-        }],
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"text": prompt or _VISION_PROMPT},
+                    {"inline_data": {"mime_type": mime, "data": b64}},
+                ],
+            }
+        ],
         "generationConfig": {
             "temperature": 0.2,
             "topK": 40,
@@ -206,6 +209,7 @@ def call_gemini_vision(image_path: Path, prompt: str | None = None) -> str | Non
 # -----------------------------------------------------------------------------
 # 4. JSON 解析与校验
 # -----------------------------------------------------------------------------
+
 
 def _extract_json_blob(text: str) -> dict | None:
     """从 Gemini 输出中提取 JSON（容忍 ```json 围栏）。"""
@@ -243,7 +247,15 @@ def _normalize_vision_output(raw: dict) -> dict:
     edge = subj.get("silhouette_edge") or {}
     safe_zone = raw.get("safe_text_zone") or "above-below"
     obj_pos = raw.get("object_position") or "center 50%"
-    if safe_zone not in {"above-below", "one-side", "diagonal-tl", "diagonal-tr", "diagonal-bl", "diagonal-br", "none"}:
+    if safe_zone not in {
+        "above-below",
+        "one-side",
+        "diagonal-tl",
+        "diagonal-tr",
+        "diagonal-bl",
+        "diagonal-br",
+        "none",
+    }:
         safe_zone = "above-below"
     if obj_pos not in {"center 25%", "center 35%", "center 50%", "center 70%", "center top"}:
         obj_pos = "center 50%"
@@ -264,18 +276,22 @@ def _normalize_vision_output(raw: dict) -> dict:
             "bottom_pct": _clamp_pct(edge.get("bottom_pct"), 100.0),
         },
         "safe_zone": safe_zone,
-        "quiet_zone": quiet.get("description") or ("≥30% canvas low-detail band" if quiet.get("passes_quiet_zone_test") else "no clear quiet band"),
+        "quiet_zone": quiet.get("description")
+        or ("≥30% canvas low-detail band" if quiet.get("passes_quiet_zone_test") else "no clear quiet band"),
         "quiet_zone_rect": {
             "x_pct": _clamp_pct(quiet.get("x_pct"), 0.0),
             "y_pct": _clamp_pct(quiet.get("y_pct"), 50.0),
             "width_pct": _clamp_pct(quiet.get("width_pct"), 30.0),
             "height_pct": _clamp_pct(quiet.get("height_pct"), 30.0),
         },
-        "light": light.get("type") or ("atmospheric / restrained light" if light.get("passes_light_test") else "high-saturation noon"),
+        "light": light.get("type")
+        or ("atmospheric / restrained light" if light.get("passes_light_test") else "high-saturation noon"),
         "object_position": obj_pos,
         "passes_quiet_zone": bool(quiet.get("passes_quiet_zone_test")),
         "passes_light": bool(light.get("passes_light_test")),
-        "requires_localized_tint": not (bool(quiet.get("passes_quiet_zone_test")) and bool(light.get("passes_light_test"))),
+        "requires_localized_tint": not (
+            bool(quiet.get("passes_quiet_zone_test")) and bool(light.get("passes_light_test"))
+        ),
         "text_can_overlay": bool((raw.get("recommendation") or {}).get("text_can_overlay")),
         "vision_reason": (raw.get("recommendation") or {}).get("reason", ""),
     }
@@ -284,6 +300,7 @@ def _normalize_vision_output(raw: dict) -> dict:
 # -----------------------------------------------------------------------------
 # 5. 缓存
 # -----------------------------------------------------------------------------
+
 
 def _image_hash(image_path: Path, prompt_version: str = VISION_PROMPT_VERSION) -> str:
     """基于文件字节 + 大小 + 提示版本哈希（避免大文件 base64 进 key）。"""
@@ -344,6 +361,7 @@ def vision_cache_remember(cache_dir: Path, image_path: Path, vision_smap: dict) 
 # 6. 主入口
 # -----------------------------------------------------------------------------
 
+
 def build_vision_subject_map(image_path: Path, cache_dir: Path | None = None) -> dict | None:
     """vision 读图返回 subject_map（normalized）。失败返回 None。
 
@@ -374,6 +392,7 @@ def build_vision_subject_map(image_path: Path, cache_dir: Path | None = None) ->
 # -----------------------------------------------------------------------------
 # 7. 合并 vision + 启发式
 # -----------------------------------------------------------------------------
+
 
 def merge_vision_into_subject_map(heuristic: dict, vision: dict) -> dict:
     """vision 覆盖坐标字段，heuristic 保留 type/label/face 标签。
@@ -430,6 +449,7 @@ def merge_vision_into_subject_map(heuristic: dict, vision: dict) -> dict:
 # -----------------------------------------------------------------------------
 # 8. 配额与并发
 # -----------------------------------------------------------------------------
+
 
 def call_vision_for_pages(
     image_paths: list[Path],

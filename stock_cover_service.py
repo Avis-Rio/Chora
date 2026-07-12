@@ -21,7 +21,6 @@ from typing import Iterable
 
 import requests
 
-
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "").strip()
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY", "").strip()
 

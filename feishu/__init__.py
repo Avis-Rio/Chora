@@ -16,12 +16,12 @@ Submodules split responsibilities by concern:
 The :class:`FeishuService` class below composes all of them via mixins.
 """
 
-from ._client import ClientMixin
 from ._auth import AuthMixin
+from ._client import ClientMixin
 from ._fields import FieldMixin
 from ._records import RecordMixin
-from ._uploads import UploadMixin
 from ._sync import SyncMixin
+from ._uploads import UploadMixin
 
 
 class FeishuService(ClientMixin, AuthMixin, FieldMixin, RecordMixin, UploadMixin, SyncMixin):

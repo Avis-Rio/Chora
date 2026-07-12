@@ -6,7 +6,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-
 IMAGE_SIGNATURES = {
     b"\x89PNG\r\n\x1a\n": ".png",
     b"\xff\xd8\xff": ".jpg",

@@ -17,33 +17,100 @@ from __future__ import annotations
 from html import escape
 from typing import Iterable
 
-
 # -----------------------------------------------------------------------------
 # 1. 判定：是不是 UI 截图
 # -----------------------------------------------------------------------------
 
 # 关键词命中：UI / app / dashboard / code / IDE / terminal / browser 抓屏
 _SCREENSHOT_HINTS: tuple[str, ...] = (
-    "screenshot", "screen-shot", "screen_shot", "screen capture", "screen-capture",
-    "ui shot", "ui-shot", "app shot", "app-shot", "app capture", "app screenshot",
-    "interface", "dashboard", "panel", "admin", "settings page",
-    "code shot", "code-shot", "ide", "editor", "terminal", "console", "cli",
-    "browser", "web capture", "web-capture", "desktop capture", "desktop-capture",
-    "screenshot.png", "screenshot.jpg", "screenshot.webp",
-    "wechat 截图", "截屏", "截图", "界面图", "应用截图",
-    "app 内", "app内",
+    "screenshot",
+    "screen-shot",
+    "screen_shot",
+    "screen capture",
+    "screen-capture",
+    "ui shot",
+    "ui-shot",
+    "app shot",
+    "app-shot",
+    "app capture",
+    "app screenshot",
+    "interface",
+    "dashboard",
+    "panel",
+    "admin",
+    "settings page",
+    "code shot",
+    "code-shot",
+    "ide",
+    "editor",
+    "terminal",
+    "console",
+    "cli",
+    "browser",
+    "web capture",
+    "web-capture",
+    "desktop capture",
+    "desktop-capture",
+    "screenshot.png",
+    "screenshot.jpg",
+    "screenshot.webp",
+    "wechat 截图",
+    "截屏",
+    "截图",
+    "界面图",
+    "应用截图",
+    "app 内",
+    "app内",
 )
 
 # 排除：明显是摄影/插画/3D 渲染的图
 _PHOTOGRAPHIC_HINTS: tuple[str, ...] = (
-    "人像", "肖像", "自拍", "半身", "全身", "特写", "脸", "手",
-    "风景", "街景", "山川", "海边", "山野", "城市", "建筑外观", "外景",
-    "食物", "菜品", "摆盘", "美食大片", "菜片",
-    "portrait", "selfie", "person", "people", "face", "hand",
-    "landscape", "scenery", "cityscape", "outdoor", "exterior",
-    "food", "dish", "cuisine", "meal",
-    "插画", "矢量", "3d", "3d 渲染", "render",
-    "illustration", "vector", "3d render", "3d-render", "cgi",
+    "人像",
+    "肖像",
+    "自拍",
+    "半身",
+    "全身",
+    "特写",
+    "脸",
+    "手",
+    "风景",
+    "街景",
+    "山川",
+    "海边",
+    "山野",
+    "城市",
+    "建筑外观",
+    "外景",
+    "食物",
+    "菜品",
+    "摆盘",
+    "美食大片",
+    "菜片",
+    "portrait",
+    "selfie",
+    "person",
+    "people",
+    "face",
+    "hand",
+    "landscape",
+    "scenery",
+    "cityscape",
+    "outdoor",
+    "exterior",
+    "food",
+    "dish",
+    "cuisine",
+    "meal",
+    "插画",
+    "矢量",
+    "3d",
+    "3d 渲染",
+    "render",
+    "illustration",
+    "vector",
+    "3d render",
+    "3d-render",
+    "cgi",
 )
 
 
@@ -112,8 +179,16 @@ _RATIO_HERO = "21x9"
 
 # 手机抓屏识别
 _MOBILE_HINTS: tuple[str, ...] = (
-    "mobile", "phone", "ios", "android", "wechat", "app 内", "app内",
-    "手机", "移动", "微信",
+    "mobile",
+    "phone",
+    "ios",
+    "android",
+    "wechat",
+    "app 内",
+    "app内",
+    "手机",
+    "移动",
+    "微信",
 )
 
 
@@ -124,9 +199,7 @@ def _pick_ratio(image: dict, page: dict | None) -> str:
     - 显式 wide 关键词 → 16x9
     - 兜底 16x10（app/web 抓屏默认；上游两个 cheat-sheet 配方都用 16x10）
     """
-    haystack = " ".join(
-        str(image.get(k, "")) for k in ("caption", "alt", "asset_id", "filename")
-    ).lower()
+    haystack = " ".join(str(image.get(k, "")) for k in ("caption", "alt", "asset_id", "filename")).lower()
     if (page or {}).get("hero"):
         return _RATIO_HERO
     if _word_hits(_MOBILE_HINTS, haystack):
@@ -233,6 +306,7 @@ def decide_screenshot_params(
 # 3. 渲染：<div class="device-X"> > <div class="frame-shot X Y Z"> > <img>
 # -----------------------------------------------------------------------------
 
+
 def _class_list(params: dict) -> list[str]:
     classes = ["frame-shot"]
     if params.get("asset_bg"):
@@ -264,12 +338,7 @@ def render_screenshot_frame(
         return ""
     page = page or {}
     params = decide_screenshot_params(image, page, mode=mode, theme=theme)
-    caption = (
-        image.get("caption")
-        or image.get("alt")
-        or image.get("asset_id")
-        or "Source image"
-    )
+    caption = image.get("caption") or image.get("alt") or image.get("asset_id") or "Source image"
     style_parts: list[str] = []
     if min_height is not None:
         style_parts.append(f"min-height:{min_height}px")
@@ -279,7 +348,7 @@ def render_screenshot_frame(
         f'<div class="{classes}" style="{style}">'
         f'<img src="{escape(str(src))}" alt="{escape(str(caption))}" '
         f'style="object-position:{escape(str(image.get("object_position", "center 50%")))}">'
-        f'</div>'
+        f"</div>"
     )
     if params.get("device"):
         return f'<div class="{params["device"]}">{inner}</div>'
@@ -290,13 +359,9 @@ def render_screenshot_frame(
 # 4. 分发：拍图用 .frame-img，截图用 .frame-shot
 # -----------------------------------------------------------------------------
 
+
 def _image_caption(image: dict, default: str) -> str:
-    return (
-        image.get("caption")
-        or image.get("alt")
-        or image.get("asset_id")
-        or default
-    )
+    return image.get("caption") or image.get("alt") or image.get("asset_id") or default
 
 
 def render_image_frame(
@@ -336,5 +401,5 @@ def render_image_frame(
         f'<img src="{escape(str(image.get("src")))}" alt="{escape(caption)}" '
         f'style="object-position:{escape(str(image.get("object_position", "center 50%")))}">'
         f'<figcaption class="img-cap">{escape(fig_label)} · {escape(caption)}</figcaption>'
-        f'</figure>'
+        f"</figure>"
     )

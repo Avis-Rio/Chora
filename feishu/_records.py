@@ -1,9 +1,5 @@
 """Record CRUD against the Feishu Bitable API."""
 
-import json
-import time
-from datetime import datetime
-
 
 class RecordMixin:
     """list / find / create / update records plus schema introspection."""
@@ -17,20 +13,20 @@ class RecordMixin:
             response = self._request("GET", url, headers=self._headers(), params=params)
             result = response.json()
 
-            if result.get('code') == 0:
-                return result.get('data', {}).get('items', [])
+            if result.get("code") == 0:
+                return result.get("data", {}).get("items", [])
             else:
                 print(f"❌ Failed to list records: {result}")
                 return []
-        except:
+        except Exception:
             return []
 
     def find_by_id(self, content_id):
         """Find a record by content ID using field aliases."""
         records = self.list_records()
-        id_field = self._resolve_field_name('id', self.get_table_fields())[0] or '记录ID'
+        id_field = self._resolve_field_name("id", self.get_table_fields())[0] or "记录ID"
         for record in records:
-            fields = record.get('fields', {})
+            fields = record.get("fields", {})
             if fields.get(id_field) == content_id:
                 return record
         return None
@@ -43,8 +39,8 @@ class RecordMixin:
         try:
             response = self._request("POST", url, headers=self._headers(), json=payload)
             result = response.json()
-            if result.get('code') == 0:
-                record_id = result.get('data', {}).get('record', {}).get('record_id')
+            if result.get("code") == 0:
+                record_id = result.get("data", {}).get("record", {}).get("record_id")
                 print(f"✅ Created record: {data.get('title', 'Unknown')[:30]}...")
                 return record_id
             else:
@@ -62,7 +58,7 @@ class RecordMixin:
         try:
             response = self._request("PUT", url, headers=self._headers(), json=payload)
             result = response.json()
-            if result.get('code') == 0:
+            if result.get("code") == 0:
                 print(f"✅ Updated record: {data.get('title', 'Unknown')[:30]}...")
                 return True
             else:
@@ -78,12 +74,12 @@ class RecordMixin:
         try:
             response = self._request("GET", url, headers=self._headers())
             result = response.json()
-            if result.get('code') == 0:
-                items = result.get('data', {}).get('items', [])
+            if result.get("code") == 0:
+                items = result.get("data", {}).get("items", [])
                 field_map = {}
                 for f in items:
-                    name = f.get('field_name')
-                    ftype = self._feishu_type_to_internal(f.get('type'))
+                    name = f.get("field_name")
+                    ftype = self._feishu_type_to_internal(f.get("type"))
                     field_map[name] = ftype
                 return field_map
             else:
@@ -97,15 +93,15 @@ class RecordMixin:
     def _feishu_type_to_internal(type_value):
         """Map Feishu Bitable numeric/string type to internal type name."""
         mapping = {
-            1: 'text',
-            2: 'number',
-            3: 'single_select',
-            4: 'multi_select',
-            5: 'date',
-            7: 'checkbox',
-            11: 'attachment',
-            15: 'url',
+            1: "text",
+            2: "number",
+            3: "single_select",
+            4: "multi_select",
+            5: "date",
+            7: "checkbox",
+            11: "attachment",
+            15: "url",
         }
         if isinstance(type_value, int):
-            return mapping.get(type_value, 'text')
-        return str(type_value).lower() if type_value else 'text'
+            return mapping.get(type_value, "text")
+        return str(type_value).lower() if type_value else "text"

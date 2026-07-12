@@ -23,7 +23,13 @@ Note: ``distribution_pipeline/assets/ai_image/gateway.py`` performs a dynamic
 callsite continues to work after the monolithic file was removed.
 """
 
+from generate_cover.image import generate_cover
 from generate_cover.palettes import get_color_palette_for_topic
+from generate_cover.pipeline import (
+    generate_podcast_cover,
+    generate_podcast_cover_with_fallback,
+    regenerate_missing_covers,
+)
 from generate_cover.style import (
     analyze_content_style,
     get_random_style,
@@ -33,12 +39,6 @@ from generate_cover.style import (
 from generate_cover.title import (
     clean_title_with_llm,
     extract_title_from_dirname,
-)
-from generate_cover.image import generate_cover
-from generate_cover.pipeline import (
-    generate_podcast_cover,
-    generate_podcast_cover_with_fallback,
-    regenerate_missing_covers,
 )
 
 __all__ = [

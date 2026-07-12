@@ -1,7 +1,6 @@
 import pytest
 
-from distribution_pipeline.renderers.html_to_image import discover_html_outputs
-from distribution_pipeline.renderers.html_to_image import _generate_thumbnails
+from distribution_pipeline.renderers.html_to_image import _generate_thumbnails, discover_html_outputs
 
 
 def test_discover_html_outputs_finds_cards(tmp_path):

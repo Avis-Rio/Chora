@@ -11,6 +11,7 @@ the podcast cover pipeline:
   Used by :func:`regenerate_missing_covers`.
 """
 
+import json
 import re
 
 from generate_cover._infra import call_gemini_text
@@ -51,18 +52,18 @@ Return ONLY a valid JSON object:
         try:
             json_str = response
             if "```json" in json_str:
-                match = re.search(r'```json\n(.*?)\n```', json_str, re.DOTALL)
+                match = re.search(r"```json\n(.*?)\n```", json_str, re.DOTALL)
                 if match:
                     json_str = match.group(1)
             elif "```" in json_str:
-                match = re.search(r'```\n(.*?)\n```', json_str, re.DOTALL)
+                match = re.search(r"```\n(.*?)\n```", json_str, re.DOTALL)
                 if match:
                     json_str = match.group(1)
 
-            start = json_str.find('{')
-            end = json_str.rfind('}')
+            start = json_str.find("{")
+            end = json_str.rfind("}")
             if start != -1 and end != -1:
-                json_str = json_str[start:end + 1]
+                json_str = json_str[start : end + 1]
 
             data = json.loads(json_str)
             cleaned = data.get("clean_title")
@@ -92,13 +93,13 @@ def extract_title_from_dirname(dir_name):
     """
     original = dir_name
 
-    if dir_name.startswith('xiaoyuzhou_'):
-        dir_name = dir_name[len('xiaoyuzhou_'):]
+    if dir_name.startswith("xiaoyuzhou_"):
+        dir_name = dir_name[len("xiaoyuzhou_") :]
 
-    if '_-_' in dir_name:
-        dir_name = dir_name.split('_-_')[0]
+    if "_-_" in dir_name:
+        dir_name = dir_name.split("_-_")[0]
 
-    parts = dir_name.split('_')
+    parts = dir_name.split("_")
 
     if len(parts) < 2:
         return dir_name if dir_name else original
@@ -107,7 +108,7 @@ def extract_title_from_dirname(dir_name):
 
     filtered = []
     for part in remaining_parts:
-        if part.upper() in ['FULL', 'EP', 'E']:
+        if part.upper() in ["FULL", "EP", "E"]:
             continue
         filtered.append(part)
 
@@ -116,19 +117,19 @@ def extract_title_from_dirname(dir_name):
 
     title_candidate = filtered[0]
 
-    series_match = re.match(r'^([^0-9]+)(\d+)(.+)$', title_candidate)
+    series_match = re.match(r"^([^0-9]+)(\d+)(.+)$", title_candidate)
     if series_match:
         actual_title = series_match.group(3)
         if len(actual_title) >= 4:
             title_candidate = actual_title
 
-    paren_match = re.match(r'^([^（]+)（.*）$', title_candidate)
+    paren_match = re.match(r"^([^（]+)（.*）$", title_candidate)
     if paren_match:
         main_title = paren_match.group(1).strip()
         if len(main_title) >= 4:
             title_candidate = main_title
 
-    paren_match_en = re.match(r'^([^(]+)\(.*\)$', title_candidate)
+    paren_match_en = re.match(r"^([^(]+)\(.*\)$", title_candidate)
     if paren_match_en:
         main_title = paren_match_en.group(1).strip()
         if len(main_title) >= 4:

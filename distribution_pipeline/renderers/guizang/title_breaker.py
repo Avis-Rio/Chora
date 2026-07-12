@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 END_PUNCT = "。.!！?？；;"
 STRONG_MARKS = "，,、：:；;|｜—-"
 SOFT_WORDS = (
@@ -133,9 +132,8 @@ def _candidate_score(text: str, pos: int, target: int, min_tail: int) -> int:
     # 2-char sequence forms a common word in PROTECTED_PHRASES or any 2-CJK
     # segment, the candidate is much worse. This protects phrases like
     # "形塑了" -> avoid cut between 形 and 塑.
-    if (
-        re.fullmatch(r"[一-鿿]", head[-1:] if head else "")
-        and re.fullmatch(r"[一-鿿]", tail[:1] if tail else "")
+    if re.fullmatch(r"[一-鿿]", head[-1:] if head else "") and re.fullmatch(
+        r"[一-鿿]", tail[:1] if tail else ""
     ):
         compound = head[-1] + tail[:1]
         score += 220
@@ -168,11 +166,7 @@ def _best_cut(text: str, target: int, min_tail: int) -> int:
     # straddling the cut: b=text[pos-1] (head tail) and c=text[pos] (tail
     # head). If "bc" forms a content pair (both CJK, neither is a stopword),
     # cutting here would tear a word in half — skip the position.
-    filtered = [
-        pos
-        for pos in candidates
-        if not _splits_content_pair(text, pos)
-    ]
+    filtered = [pos for pos in candidates if not _splits_content_pair(text, pos)]
     pool = filtered or list(candidates)
     return min(pool, key=lambda pos: _candidate_score(text, pos, target, min_tail))
 
@@ -234,7 +228,11 @@ def _pack_chunks(chunks: list[str], target: int, min_tail: int) -> list[str]:
                 current = piece
                 continue
             joined = f"{current}{piece}" if piece.startswith(("）", ")")) else f"{current}{piece}"
-            spaced = f"{current} {piece}" if re.search(r"[A-Za-z0-9]$", current) and re.match(r"^[A-Za-z0-9]", piece) else joined
+            spaced = (
+                f"{current} {piece}"
+                if re.search(r"[A-Za-z0-9]$", current) and re.match(r"^[A-Za-z0-9]", piece)
+                else joined
+            )
             if len(spaced) <= target + 2:
                 current = spaced
             else:

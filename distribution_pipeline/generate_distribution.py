@@ -4,17 +4,17 @@ from pathlib import Path
 
 from distribution_pipeline.extractors.package_builder import build_content_package
 from distribution_pipeline.renderers.guizang.exporter import export_guizang_images
-from distribution_pipeline.renderers.guizang.guizang_renderer import render_guizang_wechat_package
-from distribution_pipeline.renderers.guizang.guizang_renderer import render_guizang_xhs_package
-from distribution_pipeline.renderers.guizang.guizang_renderer import resolve_guizang_mode
-from distribution_pipeline.renderers.guizang.validator import quality_gate_from_review
-from distribution_pipeline.renderers.guizang.validator import run_guizang_validator
+from distribution_pipeline.renderers.guizang.guizang_renderer import (
+    render_guizang_wechat_package,
+    render_guizang_xhs_package,
+    resolve_guizang_mode,
+)
+from distribution_pipeline.renderers.guizang.validator import quality_gate_from_review, run_guizang_validator
 from distribution_pipeline.renderers.html_to_image import export_html_to_images
 from distribution_pipeline.renderers.manifest import build_manifest, write_manifest
 from distribution_pipeline.renderers.wechat_renderer import render_wechat_package
 from distribution_pipeline.renderers.xhs_renderer import render_xhs_package
 from distribution_pipeline.reviewers.repetition import review_repetition
-
 
 GUIZANG_VALIDATOR_NO_EXPORT_REASON = "Guizang validator skipped because image export is disabled."
 
@@ -120,7 +120,10 @@ def run(
                 if not (review.get("quality_gate") or {}).get("publishable", False)
             ]
             if blocked:
-                details = {name: (guizang_review[name].get("quality_gate") or {}).get("blocking_reasons", []) for name in blocked}
+                details = {
+                    name: (guizang_review[name].get("quality_gate") or {}).get("blocking_reasons", [])
+                    for name in blocked
+                }
                 raise RuntimeError(f"Guizang quality gate failed for {', '.join(blocked)}: {details}")
         manifest = build_manifest(
             package_dir,
@@ -167,7 +170,12 @@ def main():
     parser.add_argument("--output-root", type=Path, default=Path("distribution"))
     parser.add_argument("--no-export-images", action="store_true")
     parser.add_argument("--renderer", default="basic", choices=["basic", "guizang"])
-    parser.add_argument("--guizang-mode", default="auto", choices=["auto", "llm", "editorial", "swiss"], help="Guizang mode：auto 啟發式；llm 外部 LLM 自定（需 CHORA_DISTRIBUTION_MODE_LLM_URL/_KEY）；editorial/swiss 強制指定。")
+    parser.add_argument(
+        "--guizang-mode",
+        default="auto",
+        choices=["auto", "llm", "editorial", "swiss"],
+        help="Guizang mode：auto 啟發式；llm 外部 LLM 自定（需 CHORA_DISTRIBUTION_MODE_LLM_URL/_KEY）；editorial/swiss 強制指定。",
+    )
     parser.add_argument("--guizang-theme", default="auto")
     parser.add_argument(
         "--image-assets",
@@ -175,9 +183,17 @@ def main():
         choices=["plan", "candidates", "download"],
         help="Guizang 图像资产处理模式：plan 仅写搜索计划，candidates 仅拉候选，download 下载首选候选。",
     )
-    parser.add_argument("--strict-quality-gate", action="store_true", help="把 Guizang 静态 QA warning 升级为不可发布阻断。")
-    parser.add_argument("--require-browser-validator", action="store_true", help="要求 Playwright 浏览器 QA 必须成功运行，不能跳过。")
-    parser.add_argument("--fail-on-quality-gate", action="store_true", help="质量门不通过时令 CLI 以错误退出。")
+    parser.add_argument(
+        "--strict-quality-gate", action="store_true", help="把 Guizang 静态 QA warning 升级为不可发布阻断。"
+    )
+    parser.add_argument(
+        "--require-browser-validator",
+        action="store_true",
+        help="要求 Playwright 浏览器 QA 必须成功运行，不能跳过。",
+    )
+    parser.add_argument(
+        "--fail-on-quality-gate", action="store_true", help="质量门不通过时令 CLI 以错误退出。"
+    )
     args = parser.parse_args()
 
     package_dir = run(

@@ -5,14 +5,15 @@ from pathlib import Path
 
 from distribution_pipeline.assets.image_assets import materialize_image_assets
 from distribution_pipeline.renderers.guizang.category_router import detect_rednote_category
-from distribution_pipeline.renderers.guizang.page_planner import build_xhs_pages
-from distribution_pipeline.renderers.guizang.page_planner import content_profile
+from distribution_pipeline.renderers.guizang.page_planner import build_xhs_pages, content_profile
 from distribution_pipeline.renderers.guizang.recipes import render_page_section
-from distribution_pipeline.renderers.guizang.render_script import build_render_script, build_xhs_render_targets
+from distribution_pipeline.renderers.guizang.render_script import (
+    build_render_script,
+    build_xhs_render_targets,
+)
 from distribution_pipeline.renderers.guizang.template_loader import load_template, vendor_path
 from distribution_pipeline.renderers.guizang.theme import resolve_theme
 from distribution_pipeline.renderers.xhs_copy import DEFAULT_CHORA_URL, build_xhs_publish_md
-
 
 POSTERS_MARKER = "<!-- POSTERS_HERE -->"
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -37,7 +38,9 @@ def _replace_html_attribute(html: str, attribute: str, value: str) -> str:
 
 def _set_title(html: str, title: str) -> str:
     safe_title = escape(str(title or "Chora"), quote=False)
-    return re.sub(r"<title>.*?</title>", f"<title>{safe_title} · Chora Distribution</title>", html, count=1, flags=re.S)
+    return re.sub(
+        r"<title>.*?</title>", f"<title>{safe_title} · Chora Distribution</title>", html, count=1, flags=re.S
+    )
 
 
 def _inject_posters(template: str, sections: list[str]) -> str:
@@ -108,7 +111,9 @@ def _select_mode_heuristic(package: dict, target: str) -> str:
         return "swiss"
     if profile == "creator-growth":
         return "swiss"
-    if profile == "ai-tech" and any(word in text for word in ("token", "成本", "价格", "指标", "数据", "算力", "增长", "%", "倍")):
+    if profile == "ai-tech" and any(
+        word in text for word in ("token", "成本", "价格", "指标", "数据", "算力", "增长", "%", "倍")
+    ):
         return "swiss"
     return "editorial"
 
@@ -248,11 +253,7 @@ def _wide_wechat_title(source: dict, cover_lines: list[str]) -> str:
         return "谷歌 AI 慢半拍，但还没输"
     if "token" in lowered or "成本" in text:
         return "AI 成本重新分配权力"
-    joined = "，".join(
-        _strip_punctuation(line)
-        for line in cover_lines
-        if str(line or "").strip()
-    )
+    joined = "，".join(_strip_punctuation(line) for line in cover_lines if str(line or "").strip())
     if 4 <= len(joined) <= 18:
         return joined
     clean = _strip_punctuation(str(source.get("title", "")))
@@ -273,11 +274,15 @@ def _wechat_cover_copy(package: dict) -> dict:
 
 
 def _wechat_section_shell(section_id: str, poster_class: str, inner: str, decorative: bool = True) -> str:
-    layers = """
+    layers = (
+        """
       <canvas class="mag-bg" data-bg="ink-flow" style="display:block"></canvas>
       <div class="paper-wash" style="display:block"></div>
       <div class="grain" style="display:block"></div>
-""" if decorative else ""
+"""
+        if decorative
+        else ""
+    )
     return f"""
     <section class="poster {poster_class}" id="{_e(section_id)}">
 {layers}      {inner}
@@ -294,7 +299,7 @@ def _render_wechat_wide(copy: dict, source: dict, image: dict, section_id: str =
             <figcaption class="img-cap">SOURCE · {_e(source.get("channel", "Chora"))}</figcaption>
           </figure>"""
     else:
-        image_html = f"""
+        image_html = """
           <div style="min-height:460px;border:1px solid var(--line);background:rgba(var(--accent-rgb),.06);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:44px;color:rgba(var(--accent-rgb),.42);letter-spacing:.18em;text-transform:uppercase">
             CHORA
           </div>"""
@@ -331,14 +336,11 @@ def _render_wechat_swiss_wide(copy: dict, source: dict, image: dict, section_id:
         {"num": "01", "lbl": "INSIGHT"},
         {"num": source.get("channel", "Chora")[:8], "lbl": "SOURCE"},
     ]
-    stats_html = "\n".join(
-        f"""
+    stats_html = "\n".join(f"""
           <div class="stat-block" style="padding:20px 28px;background:rgba(var(--ink-rgb),.05);border-left:3px solid var(--accent)">
             <p class="num" style="font-size:48px;line-height:1">{_e(s['num'])}</p>
             <p class="lbl" style="font-size:16px;letter-spacing:.12em">{_e(s['lbl'])}</p>
-          </div>"""
-        for s in stats
-    )
+          </div>""" for s in stats)
     image_html = ""
     if image.get("render_path"):
         image_html = f"""
@@ -346,7 +348,7 @@ def _render_wechat_swiss_wide(copy: dict, source: dict, image: dict, section_id:
             <img src="{_e(image.get("render_path"))}" alt="{_e(image.get("caption") or "source cover")}" style="object-position:{_e(image.get("object_position", "center 50%"))}">
           </figure>"""
     else:
-        image_html = f"""
+        image_html = """
           <div style="min-height:360px;border:1px solid var(--line);background:rgba(var(--accent-rgb),.06);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:44px;color:rgba(var(--accent-rgb),.42);letter-spacing:.18em;text-transform:uppercase">
             CHORA
           </div>"""
@@ -467,8 +469,12 @@ def render_guizang_xhs_package(
     post_path = xhs_dir / "post.md"
     render_path = xhs_dir / "render.cjs"
     html_path.write_text(html, encoding="utf-8")
-    post_path.write_text(build_xhs_publish_md(package["source"], package["insights"], brand=brand), encoding="utf-8")
-    render_path.write_text(build_render_script("index.html", build_xhs_render_targets(pages)), encoding="utf-8")
+    post_path.write_text(
+        build_xhs_publish_md(package["source"], package["insights"], brand=brand), encoding="utf-8"
+    )
+    render_path.write_text(
+        build_render_script("index.html", build_xhs_render_targets(pages)), encoding="utf-8"
+    )
     return [html_path, post_path, render_path]
 
 

@@ -2,16 +2,14 @@ import os
 import subprocess
 from pathlib import Path
 
-
 DEPENDENCY_MESSAGE = (
-    "Guizang image export requires Node.js and Playwright. "
-    "Playwright browser binaries are also required."
+    "Guizang image export requires Node.js and Playwright. " "Playwright browser binaries are also required."
 )
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # Playwright 默認瀏覽器緩存（macOS / Linux 兩套）；無則 Playwright 自己 fall back
 _DEFAULT_PLAYWRIGHT_BROWSERS = (
     Path.home() / "Library" / "Caches" / "ms-playwright",  # macOS
-    Path.home() / ".cache" / "ms-playwright",             # Linux
+    Path.home() / ".cache" / "ms-playwright",  # Linux
 )
 PROJECT_PLAYWRIGHT_BROWSERS = PROJECT_ROOT / ".ms-playwright"
 

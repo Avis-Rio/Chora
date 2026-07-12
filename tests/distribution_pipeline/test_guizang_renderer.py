@@ -1,9 +1,11 @@
 from pathlib import Path
 
 from distribution_pipeline.extractors.package_builder import build_content_package
-from distribution_pipeline.renderers.guizang.guizang_renderer import render_guizang_wechat_package
-from distribution_pipeline.renderers.guizang.guizang_renderer import render_guizang_xhs_package
-from distribution_pipeline.renderers.guizang.guizang_renderer import resolve_guizang_mode
+from distribution_pipeline.renderers.guizang.guizang_renderer import (
+    render_guizang_wechat_package,
+    render_guizang_xhs_package,
+    resolve_guizang_mode,
+)
 
 
 def test_render_guizang_xhs_package_writes_single_index(tmp_path):
@@ -126,7 +128,11 @@ def test_resolve_guizang_mode_auto_routes_culture_and_psychology_to_editorial():
         ],
     }
     solitude = {
-        "source": {"title": "Why People Disappear | The Psychology of Being Alone", "channel": "Aperture", "tags": []},
+        "source": {
+            "title": "Why People Disappear | The Psychology of Being Alone",
+            "channel": "Aperture",
+            "tags": [],
+        },
         "insights": [
             {
                 "index": 1,
@@ -175,7 +181,6 @@ def test_render_guizang_wechat_package_swiss_mode(tmp_path):
     assert "SWISS" in html
     assert " wide swiss" in html
     assert " square swiss" in html
-
 
 
 def test_render_guizang_xhs_package_swiss_map_recipe(tmp_path):

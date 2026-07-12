@@ -4,8 +4,8 @@ Used to attach covers (and any other binary asset) to Bitable records.
 Implements the multipart ``drive/v1/medias/upload_all`` API.
 """
 
-import os
 import mimetypes
+import os
 
 
 class UploadMixin:
@@ -26,34 +26,28 @@ class UploadMixin:
         file_size = os.path.getsize(image_path)
         mime_type, _ = mimetypes.guess_type(image_path)
         if not mime_type:
-            mime_type = 'image/jpeg'
+            mime_type = "image/jpeg"
 
         # Upload to Feishu media
         url = "https://open.feishu.cn/open-apis/drive/v1/medias/upload_all"
 
-        with open(image_path, 'rb') as f:
-            files = {
-                'file': (file_name, f, mime_type)
-            }
+        with open(image_path, "rb") as f:
+            files = {"file": (file_name, f, mime_type)}
             data = {
-                'file_name': file_name,
-                'parent_type': 'bitable_image',
-                'parent_node': self.config.get('feishu', self.config).get('base_id'),
-                'size': str(file_size)
+                "file_name": file_name,
+                "parent_type": "bitable_image",
+                "parent_node": self.config.get("feishu", self.config).get("base_id"),
+                "size": str(file_size),
             }
 
             try:
                 response = self.session.post(
-                    url,
-                    headers=self._auth_header(),
-                    files=files,
-                    data=data,
-                    timeout=60
+                    url, headers=self._auth_header(), files=files, data=data, timeout=60
                 )
                 result = response.json()
 
-                if result.get('code') == 0:
-                    file_token = result.get('data', {}).get('file_token')
+                if result.get("code") == 0:
+                    file_token = result.get("data", {}).get("file_token")
                     print(f"   📷 Uploaded: {file_name[:30]}...")
                     return file_token
                 else:

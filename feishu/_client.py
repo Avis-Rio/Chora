@@ -12,7 +12,7 @@ from urllib3.util.retry import Retry
 class ClientMixin:
     """HTTP session + URL/headers helpers."""
 
-    def __init__(self, config_path='config/feishu.yaml'):
+    def __init__(self, config_path="config/feishu.yaml"):
         """Initialize with config file."""
         # Imported lazily so the package can be imported without a
         # configuration file being available (CI smoke test, etc.).
@@ -25,10 +25,10 @@ class ClientMixin:
         self.token_expires = 0
 
         # Field aliases can be overridden in config
-        aliases = self.config.get('field_aliases', {})
+        aliases = self.config.get("field_aliases", {})
         # FieldMixin may not be in the MRO yet at __init__ time when
         # ClientMixin alone is used; default to {} otherwise.
-        default_aliases = getattr(self, 'DEFAULT_FIELD_ALIASES', {})
+        default_aliases = getattr(self, "DEFAULT_FIELD_ALIASES", {})
         self.field_aliases = {**default_aliases, **aliases}
 
         # Setup session with retries
@@ -37,7 +37,7 @@ class ClientMixin:
             total=3,
             backoff_factor=1,
             status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "OPTIONS", "POST", "PUT"]
+            allowed_methods=["HEAD", "GET", "OPTIONS", "POST", "PUT"],
         )
         adapter = HTTPAdapter(max_retries=retry_strategy)
         self.session.mount("https://", adapter)

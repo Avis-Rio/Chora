@@ -1,9 +1,8 @@
 """戊项：C 通道 AI 生图兜底（Gemini gateway）测试。"""
 
 import json
-import os
+
 import pytest
-from pathlib import Path
 
 from distribution_pipeline.assets.ai_image.gateway import (
     AI_COVERED_ROLES,
@@ -14,7 +13,6 @@ from distribution_pipeline.assets.ai_image.gateway import (
     remember_in_cache,
     should_generate_via_ai,
 )
-
 
 # -----------------------------------------------------------------------------
 # 1. should_generate_via_ai gate 决策
@@ -76,7 +74,6 @@ def test_lookup_cache_miss_when_no_cache_file(tmp_path):
 def test_lookup_cache_hit_when_file_exists(tmp_path):
     # 准备 cache
     (tmp_path / "xhs-02-evidence.png").write_bytes(b"\x89PNG\r\n\x1a\n")
-    request = {"role": "evidence", "query": "computer vision lab", "target_pages": ["xhs-02"]}
     remember_in_cache(
         tmp_path,
         role="evidence",
@@ -271,6 +268,7 @@ def test_materialize_image_assets_candidates_mode_calls_ai(tmp_path, monkeypatch
         return materialized
 
     import distribution_pipeline.assets.image_assets as ia
+
     monkeypatch.setattr(ia, "_ai_fallback", fake_ai_fallback)
 
     plan = {

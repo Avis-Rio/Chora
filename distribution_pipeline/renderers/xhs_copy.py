@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 DEFAULT_CHORA_URL = "https://chora.avisionary.top"
 DEFAULT_BRAND = {
     "chora_url": DEFAULT_CHORA_URL,
@@ -86,7 +85,9 @@ def _semantic_tags(source: dict, insights: list[dict]) -> list[str]:
         tags.extend(["人工智能", "AI商业化", "科技商业"])
     if any(word in text for word in ("token", "成本", "算力", "价格", "推理成本")):
         tags.extend(["Token经济学", "AI成本", "算力", "商业模式"])
-    if any(word in text for word in ("grow an audience", "followers", "粉丝", "创作者", "内容创作", "audience")):
+    if any(
+        word in text for word in ("grow an audience", "followers", "粉丝", "创作者", "内容创作", "audience")
+    ):
         tags.extend(["创作者成长", "内容创作", "个人品牌"])
     if any(word in text for word in ("solitude", "alone", "孤独", "独处", "心理")):
         tags.extend(["心理学", "独处", "社会观察"])
@@ -209,8 +210,7 @@ def build_xhs_publish_md(source: dict, insights: list[dict], brand: dict | None 
     tags = build_xhs_tags(source, insights)
     tags_text = " ".join(f"#{tag}" for tag in tags)
     first_comment = (
-        f"完整文章已收录在 Chora：{brand['chora_url']}\n"
-        f"公众号可搜「{brand['rhizomata_name']}」。"
+        f"完整文章已收录在 Chora：{brand['chora_url']}\n" f"公众号可搜「{brand['rhizomata_name']}」。"
     )
     insight_backup = []
     for index, insight in enumerate(insights, start=1):

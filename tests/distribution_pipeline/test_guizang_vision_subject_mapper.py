@@ -1,15 +1,17 @@
 """vision_subject_mapper 测试（env 关时跳过真实 API）。"""
 
 import json
-import os
+from unittest.mock import MagicMock, patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 from distribution_pipeline.renderers.guizang.vision_subject_mapper import (
     VISION_DEFAULT_MAX_PER_PACKAGE,
+    _extract_json_blob,
+    _image_hash,
+    _load_gemini_config,
+    _normalize_vision_output,
     build_vision_subject_map,
-    call_gemini_vision,
     call_vision_for_pages,
     merge_vision_into_subject_map,
     vision_cache_lookup,
@@ -18,12 +20,7 @@ from distribution_pipeline.renderers.guizang.vision_subject_mapper import (
     vision_disabled,
     vision_max_per_package,
     vision_timeout,
-    _extract_json_blob,
-    _image_hash,
-    _load_gemini_config,
-    _normalize_vision_output,
 )
-
 
 # -----------------------------------------------------------------------------
 # 1. env 开关
@@ -77,12 +74,12 @@ def test_extract_json_blob_parses_plain_json():
 
 
 def test_extract_json_blob_strips_fenced_markdown():
-    text = "```json\n{\"primary_subject\": {\"type\": \"landscape\"}}\n```"
+    text = '```json\n{"primary_subject": {"type": "landscape"}}\n```'
     assert _extract_json_blob(text) == {"primary_subject": {"type": "landscape"}}
 
 
 def test_extract_json_blob_handles_surrounding_text():
-    text = "Here is the analysis:\n{\"primary_subject\": {\"type\": \"food\"}}\nDone."
+    text = 'Here is the analysis:\n{"primary_subject": {"type": "food"}}\nDone.'
     result = _extract_json_blob(text)
     assert result == {"primary_subject": {"type": "food"}}
 
@@ -108,7 +105,10 @@ def test_normalize_vision_output_complete_input():
             "silhouette_edge": {"left_pct": 50, "right_pct": 95, "top_pct": 5, "bottom_pct": 85},
         },
         "quiet_zone": {
-            "x_pct": 0, "y_pct": 70, "width_pct": 35, "height_pct": 25,
+            "x_pct": 0,
+            "y_pct": 70,
+            "width_pct": 35,
+            "height_pct": 25,
             "passes_quiet_zone_test": True,
             "description": "lower-left uniform fog",
         },
@@ -291,33 +291,47 @@ def test_build_vision_subject_map_calls_gemini_and_normalizes(tmp_path, monkeypa
     img.write_bytes(b"\x89PNG\r\n\x1a\n")
 
     fake_response = {
-        "candidates": [{
-            "content": {
-                "parts": [{
-                    "text": json.dumps({
-                        "primary_subject": {
-                            "type": "portrait",
-                            "label": "人像",
-                            "face_present": True,
-                            "face_position": {"x_pct": 50, "y_pct": 30},
-                            "silhouette_edge": {"left_pct": 30, "right_pct": 80, "top_pct": 0, "bottom_pct": 100},
-                        },
-                        "quiet_zone": {"passes_quiet_zone_test": True, "description": "sky top"},
-                        "light": {"passes_light_test": True, "type": "overcast"},
-                        "safe_text_zone": "above-below",
-                        "object_position": "center 25%",
-                        "recommendation": {"text_can_overlay": True, "reason": "ok"},
-                    })
-                }]
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": json.dumps(
+                                {
+                                    "primary_subject": {
+                                        "type": "portrait",
+                                        "label": "人像",
+                                        "face_present": True,
+                                        "face_position": {"x_pct": 50, "y_pct": 30},
+                                        "silhouette_edge": {
+                                            "left_pct": 30,
+                                            "right_pct": 80,
+                                            "top_pct": 0,
+                                            "bottom_pct": 100,
+                                        },
+                                    },
+                                    "quiet_zone": {"passes_quiet_zone_test": True, "description": "sky top"},
+                                    "light": {"passes_light_test": True, "type": "overcast"},
+                                    "safe_text_zone": "above-below",
+                                    "object_position": "center 25%",
+                                    "recommendation": {"text_can_overlay": True, "reason": "ok"},
+                                }
+                            )
+                        }
+                    ]
+                }
             }
-        }]
+        ]
     }
 
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = fake_response
 
-    with patch("distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request", return_value=mock_resp):
+    with patch(
+        "distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request",
+        return_value=mock_resp,
+    ):
         smap = build_vision_subject_map(img, cache_dir=tmp_path)
 
     assert smap is not None
@@ -325,7 +339,9 @@ def test_build_vision_subject_map_calls_gemini_and_normalizes(tmp_path, monkeypa
     assert smap["face"] is True
     assert smap["object_position"] == "center 25%"
     # 第二次调用应命中缓存，不再调 Gemini
-    with patch("distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request") as mock_post:
+    with patch(
+        "distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request"
+    ) as mock_post:
         cached = build_vision_subject_map(img, cache_dir=tmp_path)
     assert cached is not None
     assert mock_post.call_count == 0
@@ -339,7 +355,10 @@ def test_build_vision_subject_map_returns_none_on_api_error(tmp_path, monkeypatc
     mock_resp = MagicMock()
     mock_resp.status_code = 429
     mock_resp.text = "rate limited"
-    with patch("distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request", return_value=mock_resp):
+    with patch(
+        "distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request",
+        return_value=mock_resp,
+    ):
         assert build_vision_subject_map(img, cache_dir=tmp_path) is None
 
 
@@ -351,7 +370,10 @@ def test_build_vision_subject_map_returns_none_on_invalid_json(tmp_path, monkeyp
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {"candidates": [{"content": {"parts": [{"text": "not json"}]}}]}
-    with patch("distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request", return_value=mock_resp):
+    with patch(
+        "distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request",
+        return_value=mock_resp,
+    ):
         assert build_vision_subject_map(img, cache_dir=tmp_path) is None
 
 
@@ -377,7 +399,9 @@ def test_call_vision_for_pages_respects_quota(tmp_path, monkeypatch):
         img.write_bytes(b"\x89PNG\r\n\x1a\n")
 
     # max_per_package=2 → 只前 2 张尝试 vision
-    with patch("distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request") as mock_post:
+    with patch(
+        "distribution_pipeline.renderers.guizang.vision_subject_mapper._post_gemini_request"
+    ) as mock_post:
         # 模拟 vision 失败（返回 None）
         mock_resp = MagicMock()
         mock_resp.status_code = 500
@@ -400,7 +424,10 @@ def test_call_vision_for_pages_serial_concurrency(tmp_path, monkeypatch):
     for img in images:
         img.write_bytes(b"\x89PNG\r\n\x1a\n")
 
-    with patch("distribution_pipeline.renderers.guizang.vision_subject_mapper.build_vision_subject_map", return_value=None) as mock_bv:
+    with patch(
+        "distribution_pipeline.renderers.guizang.vision_subject_mapper.build_vision_subject_map",
+        return_value=None,
+    ) as mock_bv:
         call_vision_for_pages(images, tmp_path, max_per_package=2, concurrency=1)
     assert mock_bv.call_count == 2
 

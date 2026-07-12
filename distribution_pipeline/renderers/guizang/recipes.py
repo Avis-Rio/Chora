@@ -2,10 +2,11 @@ import re
 from html import escape
 
 from distribution_pipeline.renderers.guizang.content_allocator import build_copy_slots
-from distribution_pipeline.renderers.guizang.screenshot_treatment import render_image_frame as _render_image_frame
+from distribution_pipeline.renderers.guizang.screenshot_treatment import (
+    render_image_frame as _render_image_frame,
+)
 from distribution_pipeline.renderers.guizang.title_breaker import semantic_title_lines
 from distribution_pipeline.renderers.guizang.title_budget import title_budget_for
-
 
 SCAFFOLD_LABELS = {"注记", "脉络", "张力", "信号", "判断", "余波", "边界", "后果"}
 SCAFFOLD_SEQUENCE = ("注记", "脉络", "张力", "信号", "判断", "余波")
@@ -177,7 +178,22 @@ def _accent_title(title: str) -> str:
             return f'<span style="color:var(--accent)">{_e(text[:split_at])}</span>{_e(text[split_at:])}'
 
     marker_positions = []
-    for marker in ("并不是", "不是", "是", "的", "进入", "成为", "正在", "驱使", "反而", "需要", "可能", "可以", "不会", "会"):
+    for marker in (
+        "并不是",
+        "不是",
+        "是",
+        "的",
+        "进入",
+        "成为",
+        "正在",
+        "驱使",
+        "反而",
+        "需要",
+        "可能",
+        "可以",
+        "不会",
+        "会",
+    ):
         pos = text.find(marker)
         if 2 <= pos <= 10:
             marker_positions.append(pos)
@@ -250,7 +266,9 @@ def _title_plain(page: dict, target: int | None = None, max_lines: int | None = 
     return "".join(_title_lines(page, target=target, max_lines=max_lines))
 
 
-def _title_html(page: dict, target: int | None = None, max_lines: int | None = None, accent: bool = False) -> str:
+def _title_html(
+    page: dict, target: int | None = None, max_lines: int | None = None, accent: bool = False
+) -> str:
     lines = _title_lines(page, target=target, max_lines=max_lines)
     if accent:
         return "<br>".join(_accent_title(line) for line in lines)
@@ -292,7 +310,9 @@ def _title_style(title: str, base_px: int = 88, page: dict | None = None) -> str
     """Return inline style fragment using recipe title budget first, length second."""
     budget_px = None
     if page and page.get("title_budget"):
-        budget_px = (page.get("title_budget") or {}).get("font_px") or title_budget_for(page.get("recipe")).font_px
+        budget_px = (page.get("title_budget") or {}).get("font_px") or title_budget_for(
+            page.get("recipe")
+        ).font_px
     base = int(budget_px or base_px)
     length = len(str(title or ""))
     if length <= 14:
@@ -411,7 +431,9 @@ def _swiss_archive_mark(page: dict) -> str:
 def _image_figure(image: dict, fig_label: str = "FIG. 01", ratio: str = "r-4x3") -> str:
     if not image.get("src"):
         return ""
-    caption = _image_caption_label(image.get("caption") or image.get("alt") or image.get("asset_id") or "Source image")
+    caption = _image_caption_label(
+        image.get("caption") or image.get("alt") or image.get("asset_id") or "Source image"
+    )
     return f"""
         <figure class="frame-img {ratio}">
           <img src="{_e(image.get("src"))}" alt="{_e(caption)}" style="object-position:{_e(image.get("object_position", "center 50%"))}">
@@ -451,8 +473,12 @@ def _density_items(page: dict, limit: int = 3, exclude: list[str] | None = None)
         if isinstance(values, str):
             values = [values]
         candidates.extend(str(value or "").strip() for value in values if str(value or "").strip())
-    candidates.extend(str(value or "").strip() for value in (page.get("points") or []) if str(value or "").strip())
-    candidates.extend(str(value or "").strip() for value in (page.get("details") or []) if str(value or "").strip())
+    candidates.extend(
+        str(value or "").strip() for value in (page.get("points") or []) if str(value or "").strip()
+    )
+    candidates.extend(
+        str(value or "").strip() for value in (page.get("details") or []) if str(value or "").strip()
+    )
     candidates.extend(_paragraphs(page.get("body", ""), limit=limit + 2))
     items = _labelled_items(candidates, exclude=exclude, limit=limit)
     if items:
@@ -468,14 +494,11 @@ def _density_panel(
 ) -> str:
     number = _display_number(page)
     items = _density_items(page, exclude=exclude)
-    cells = "\n".join(
-        f"""
+    cells = "\n".join(f"""
             <div style="border-top:1px solid var(--line);padding-top:14px">
               <span style="display:block;font-family:var(--mono);font-size:18px;letter-spacing:.12em;color:var(--accent)">{_e(item.get("index"))}</span>
               <span style="display:block;margin-top:8px;font-family:var(--serif-zh);font-size:20px;line-height:1.4;color:var(--ink);display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden">{_e(_item_primary(item))}</span>
-            </div>"""
-        for item in items
-    )
+            </div>""" for item in items)
     return f"""
         <div class="density-panel" style="position:relative;margin-top:auto;min-height:{min_height}px;background:rgba(var(--accent-rgb),.055);border:1px solid rgba(var(--accent-rgb),.22);padding:28px 32px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden">
           <div aria-hidden="true" style="position:absolute;left:32px;right:32px;top:84px;bottom:108px;background-image:repeating-linear-gradient(90deg,rgba(var(--accent-rgb),.16) 0 1px,transparent 1px 88px),repeating-linear-gradient(0deg,rgba(var(--accent-rgb),.10) 0 1px,transparent 1px 72px);opacity:.58"></div>
@@ -508,7 +531,9 @@ def _render_editorial_cover(page: dict) -> str:
     title = "<br>".join(_e(line) for line in title_lines if str(line or "").strip())
     body = _e(page.get("body"))
     image = page.get("image") or {}
-    image_html = _render_image_frame(image, page=page, mode=page.get("mode", "editorial"), fig_label="FIG. 01", default_ratio="r-16x9")
+    image_html = _render_image_frame(
+        image, page=page, mode=page.get("mode", "editorial"), fig_label="FIG. 01", default_ratio="r-16x9"
+    )
     inner = f"""
       <div class="content stack gap-4">
         <div class="issue-row">
@@ -535,7 +560,13 @@ def _render_field_note_photo(page: dict) -> str:
     paragraphs = _paragraphs(page.get("body", ""), limit=3)
     lead = page.get("subhead") or (paragraphs[0] if paragraphs else page.get("body", ""))
     note = page.get("pullquote", "")
-    image_html = _render_image_frame(image, page=page, mode=page.get("mode", "editorial"), fig_label=f"FIELD {_display_number(page)}", default_ratio="r-3x4")
+    image_html = _render_image_frame(
+        image,
+        page=page,
+        mode=page.get("mode", "editorial"),
+        fig_label=f"FIELD {_display_number(page)}",
+        default_ratio="r-3x4",
+    )
     inner = f"""
       <div class="content stack gap-3">
         <div class="issue-row">
@@ -559,29 +590,40 @@ def _render_evidence_feature(page: dict) -> str:
     paragraphs = _paragraphs(page.get("body", ""), limit=5)
     lead = page.get("subhead") or (paragraphs[0] if paragraphs else page.get("body", ""))
     image = page.get("image") or {}
-    image_html = _render_image_frame(image, page=page, mode=page.get("mode", "editorial"), fig_label=f"FIG. {str(page.get('id', 'xhs-02'))[-2:]}", default_ratio="r-4x3")
+    image_html = _render_image_frame(
+        image,
+        page=page,
+        mode=page.get("mode", "editorial"),
+        fig_label=f"FIG. {str(page.get('id', 'xhs-02'))[-2:]}",
+        default_ratio="r-4x3",
+    )
     detail_items = _labelled_items(paragraphs[1:] or page.get("points", []), exclude=[lead], limit=3)
-    rows = "\n".join(
-        f"""
+    rows = "\n".join(f"""
           <div class="ledger-row">
             <div class="ledger-nb">{_e(item.get("index", ""))}</div>
             <div>
               <div class="ledger-title">{_e(_item_primary(item))}</div>
               <div class="ledger-note">{_e(_item_secondary(item))}</div>
             </div>
-          </div>"""
-        for item in detail_items
-    )
-    ledger_html = f"""
+          </div>""" for item in detail_items)
+    ledger_html = (
+        f"""
         <div class="ledger">
 {rows}
-        </div>""" if rows else ""
+        </div>"""
+        if rows
+        else ""
+    )
     callout_text = page.get("pullquote", "")
-    source_band = "" if rows or not callout_text else f"""
+    source_band = (
+        ""
+        if rows or not callout_text
+        else f"""
         <div class="callout" style="font-size:28px;line-height:1.25">
           {_e(callout_text)}
           <span class="callout-src">{_e(page.get("kicker", "Evidence"))}</span>
         </div>"""
+    )
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Evidence"))} · Evidence</p>
@@ -596,18 +638,21 @@ def _render_evidence_feature(page: dict) -> str:
 
 def _render_checklist(page: dict) -> str:
     items = _page_items(page, limit=6)
-    rows = "\n".join(
-        f"""
+    rows = "\n".join(f"""
           <div class="ledger-row" style="min-height:118px;align-items:start">
             <div class="ledger-nb">{_e(item.get("index", f"{index:02d}"))}</div>
             <div>
               <div class="ledger-title">{_e(_item_primary(item))}</div>
               <div class="ledger-note">{_e(_item_secondary(item))}</div>
             </div>
-          </div>"""
-        for index, item in enumerate(items[:6], start=1)
+          </div>""" for index, item in enumerate(items[:6], start=1))
+    image_html = _render_image_frame(
+        page.get("image") or {},
+        page=page,
+        mode=page.get("mode", "editorial"),
+        fig_label="MATERIAL",
+        default_ratio="r-16x9",
     )
-    image_html = _render_image_frame(page.get("image") or {}, page=page, mode=page.get("mode", "editorial"), fig_label="MATERIAL", default_ratio="r-16x9")
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Checklist"))} · Checklist</p>
@@ -626,24 +671,17 @@ def _render_evidence_wall(page: dict) -> str:
         images = [page.get("image")]
     if len(images) < 2:
         return _render_evidence_feature(page)
-    cells = "\n".join(
-        f"""
+    cells = "\n".join(f"""
           <figure class="frame-img r-4x3" style="min-height:270px">
             <img src="{_e(image.get("src"))}" alt="{_e(image.get("caption") or image.get("asset_id") or "Evidence")}" style="object-position:{_e(image.get("object_position", "center 50%"))}">
             <figcaption class="img-cap">E{index:02d} · {_e(image.get("caption") or image.get("asset_id") or "Evidence")}</figcaption>
-          </figure>"""
-        for index, image in enumerate(images[:4], start=1)
-        if image.get("src")
-    )
+          </figure>""" for index, image in enumerate(images[:4], start=1) if image.get("src"))
     items = _page_items(page, limit=3)
-    notes = "\n".join(
-        f"""
+    notes = "\n".join(f"""
             <div style="border-top:1px solid var(--line);padding-top:14px">
               <span style="display:block;font-family:var(--mono);font-size:18px;letter-spacing:.12em;color:var(--accent)">{_e(item.get("index"))}</span>
               <span style="display:block;margin-top:8px;font-family:var(--serif-zh);font-size:28px;line-height:1.24;color:var(--ink)">{_e(_item_primary(item))}</span>
-            </div>"""
-        for item in items
-    )
+            </div>""" for item in items)
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Evidence Wall"))} · Evidence Wall</p>
@@ -761,7 +799,11 @@ def _before_after_blocks(page: dict) -> tuple[dict, dict]:
             {
                 "kicker": "Before · 旧",
                 "title": "",
-                "bullets": [str(page.get("title", "")).strip().rstrip("。！？；;") + "。"] if page.get("title") else [_item_primary(items[0])],
+                "bullets": (
+                    [str(page.get("title", "")).strip().rstrip("。！？；;") + "。"]
+                    if page.get("title")
+                    else [_item_primary(items[0])]
+                ),
             },
             {
                 "kicker": "After · 新",
@@ -793,7 +835,9 @@ def _bullet_list(items: list[str]) -> str:
 
 def _render_before_after(page: dict) -> str:
     before, after = _before_after_blocks(page)
-    before_title = f'            <h3 class="h-md">{_e(before.get("title"))}</h3>' if before.get("title") else ""
+    before_title = (
+        f'            <h3 class="h-md">{_e(before.get("title"))}</h3>' if before.get("title") else ""
+    )
     after_title = f'            <h3 class="h-md">{_e(after.get("title"))}</h3>' if after.get("title") else ""
     inner = f"""
       <div class="content stack gap-3">
@@ -897,17 +941,14 @@ def _render_ledger(page: dict) -> str:
         return _render_closing_note(page)
 
     items = _page_items(page, limit=5)
-    rows = "\n".join(
-        f"""
+    rows = "\n".join(f"""
           <div class="ledger-row">
             <div class="ledger-nb">{_e(item.get("index", ""))}</div>
             <div>
               <div class="ledger-title">{_e(_item_primary(item))}</div>
               <div class="ledger-note">{_e(_item_secondary(item))}</div>
             </div>
-          </div>"""
-        for item in items[:5]
-    )
+          </div>""" for item in items[:5])
     needs_density = len(items) <= 4 or page.get("role") == "closing"
     density_exclude = [_item_primary(item) for item in items] + [_item_secondary(item) for item in items]
     ledger_min_height = 520 if needs_density else 620
@@ -930,14 +971,11 @@ def _render_sparse_marginalia(page: dict) -> str:
         f'              <p style="margin:0 0 22px;font-family:var(--serif-zh);font-size:36px;line-height:1.54;color:var(--ink)">{_e(part)}</p>'
         for part in paragraphs
     )
-    tags = "\n".join(
-        f"""
+    tags = "\n".join(f"""
               <div style="border-top:1px solid var(--line);padding-top:14px">
                 <span style="display:block;font-family:var(--mono);font-size:18px;letter-spacing:.12em;color:var(--accent)">{_e(item.get("index"))}</span>
                 <span style="display:block;margin-top:8px;font-family:var(--serif-zh);font-size:32px;color:var(--ink)">{_e(_item_primary(item))}</span>
-              </div>"""
-        for item in _density_items(page, exclude=paragraphs)
-    )
+              </div>""" for item in _density_items(page, exclude=paragraphs))
     number = _display_number(page)
     inner = f"""
       <div class="content stack gap-4" style="justify-content:space-between">
@@ -972,7 +1010,9 @@ def _render_marginalia(page: dict) -> str:
 
     paragraphs = _paragraphs(page.get("body", ""), limit=5)
     body_html = "\n".join(f'            <p class="body">{_e(part)}</p>' for part in paragraphs)
-    notes = "\n".join(f"            <p>{_e(_item_primary(item))}</p>" for item in _labelled_items(paragraphs, limit=5))
+    notes = "\n".join(
+        f"            <p>{_e(_item_primary(item))}</p>" for item in _labelled_items(paragraphs, limit=5)
+    )
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Marginalia"))}</p>
@@ -991,14 +1031,11 @@ def _render_marginalia(page: dict) -> str:
 
 def _render_closing_note(page: dict) -> str:
     items = (page.get("items") or [])[:3]
-    item_html = "\n".join(
-        f"""
+    item_html = "\n".join(f"""
           <div style="border-top:1px solid var(--line);padding-top:18px">
             <div style="font-family:var(--mono);font-size:22px;letter-spacing:.1em;color:var(--accent)">{_e(item.get("index", ""))}</div>
             <div style="margin-top:14px;font-family:var(--serif-zh);font-size:30px;line-height:1.18;color:var(--ink)">{_e(_item_primary(item))}</div>
-          </div>"""
-        for item in items
-    )
+          </div>""" for item in items)
     inner = f"""
       <div class="content stack gap-4" style="justify-content:space-between">
         <div class="stack gap-3">
@@ -1028,17 +1065,14 @@ def _render_pipeline(page: dict) -> str:
     items = page.get("items")
     if not items:
         items = [{"index": "01", "title": page.get("title", ""), "note": page.get("body", "")}]
-    steps = "\n".join(
-        f"""
+    steps = "\n".join(f"""
           <div class="step">
             <div class="step-nb">{_e(item.get("index", ""))}</div>
             <div>
               <h3 class="step-title">{_e(_item_primary(item))}</h3>
               <p class="step-desc">{_e(_item_secondary(item))}</p>
             </div>
-          </div>"""
-        for item in items[:5]
-    )
+          </div>""" for item in items[:5])
     inner = f"""
       <div class="content stack gap-3">
         <p class="kicker">{_e(page.get("kicker", "Structure"))}</p>
@@ -1093,7 +1127,9 @@ def _swiss_shell(page: dict, inner: str, mat_class: str = "") -> str:
 
 
 def _swiss_title_lines(title: str, max_lines: int = 2) -> str:
-    return "<br>".join(_e(line) for line in semantic_title_lines(str(title or ""), target=9, max_lines=max_lines, min_tail=3))
+    return "<br>".join(
+        _e(line) for line in semantic_title_lines(str(title or ""), target=9, max_lines=max_lines, min_tail=3)
+    )
 
 
 def _swiss_header(page: dict, right: str | None = None) -> str:
@@ -1181,7 +1217,12 @@ def _swiss_stats(page: dict, limit: int = 4) -> list[dict]:
         {"num": str(len(points) or 1), "lbl": "ARGUMENTS", "height": 260},
         {"num": str(page.get("display_index") or "01"), "lbl": "POINT", "height": 220},
         {"num": str(len(chips) or 3), "lbl": "SIGNALS", "height": 180},
-        {"num": str(len(_norm_text(page.get("title", ""))) or 1), "lbl": "TITLE", "height": 140, "muted": True},
+        {
+            "num": str(len(_norm_text(page.get("title", ""))) or 1),
+            "lbl": "TITLE",
+            "height": 140,
+            "muted": True,
+        },
     ][:limit]
 
 
@@ -1218,7 +1259,9 @@ def _render_swiss_accent_cover(page: dict) -> str:
 
 def _render_swiss_two_signals(page: dict) -> str:
     before, after = _before_after_blocks(page)
-    before_title = f'            <h3 class="h-md">{_e(before.get("title"))}</h3>' if before.get("title") else ""
+    before_title = (
+        f'            <h3 class="h-md">{_e(before.get("title"))}</h3>' if before.get("title") else ""
+    )
     after_title = f'            <h3 class="h-md">{_e(after.get("title"))}</h3>' if after.get("title") else ""
     evidence = _swiss_evidence_panel(page, min_height=430)
     grid_min_height = 520 if evidence else 720
@@ -1249,25 +1292,19 @@ def _render_swiss_file_card(page: dict) -> str:
     props = _swiss_metric_rows(page, limit=4, items=_slot_items(page, "sentences", limit=4))
     chips = _visible_chips(page)
     evidence = _swiss_evidence_panel(page, min_height=360)
-    rows = "\n".join(
-        f"""
+    rows = "\n".join(f"""
           <div style="display:grid;grid-template-columns:160px 1fr;gap:var(--sp-6);padding:var(--sp-6) 0;border-bottom:1px solid var(--grey-2)">
             <p class="t-meta">{_e(item["index"])}</p>
             <div>
               <p class="lead">{_e(item["label"])}</p>
               <p class="body">{_e(item["note"])}</p>
             </div>
-          </div>"""
-        for item in props
-    )
-    chip_axis = "\n".join(
-        f"""
+          </div>""" for item in props)
+    chip_axis = "\n".join(f"""
               <div style="border-top:1px solid var(--grey-2);padding-top:var(--sp-4)">
                 <p class="t-meta">{index:02d}</p>
                 <p class="lead" style="font-size:28px;margin:0">{_e(chip.get("title", ""))}</p>
-              </div>"""
-        for index, chip in enumerate(chips[:3], start=1)
-    )
+              </div>""" for index, chip in enumerate(chips[:3], start=1))
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
@@ -1306,22 +1343,16 @@ def _render_swiss_interface_mock(page: dict) -> str:
                     "source": "proxy",
                 }
             )
-    module_html = "\n".join(
-        f"""
+    module_html = "\n".join(f"""
               <div class="card-fill" style="padding:var(--sp-6)">
                 <p class="t-meta">{_e(item["index"])}</p>
                 <p class="lead">{_e(item["label"])}</p>
-              </div>"""
-        for item in modules
-    )
-    trace_html = "\n".join(
-        f"""
+              </div>""" for item in modules)
+    trace_html = "\n".join(f"""
                 <div style="border-top:1px solid var(--grey-2);padding-top:var(--sp-4)">
                   <p class="t-meta">{_e(item["index"])} · {_e(item.get("source", "proxy"))}</p>
                   <p class="body">{_e(item.get("display_value") or "signal slot")}</p>
-                </div>"""
-        for item in modules[:3]
-    )
+                </div>""" for item in modules[:3])
     image = page.get("image") or {}
     if image.get("src"):
         visual_block = f"""
@@ -1360,17 +1391,14 @@ def _render_swiss_interface_mock(page: dict) -> str:
 def _render_swiss_warning_rows(page: dict) -> str:
     row_items = _slot_items(page, "details", limit=3) or _slot_items(page, "sentences", limit=3)
     evidence = _swiss_evidence_panel(page, min_height=320)
-    rows = "\n".join(
-        f"""
+    rows = "\n".join(f"""
           <div style="display:grid;grid-template-columns:150px 1fr;gap:var(--sp-7);padding:var(--sp-7) 0;border-bottom:1px solid var(--grey-2)">
             <p class="t-meta">RISK {index:02d}</p>
             <div>
               <p class="lead">{_e(_item_primary(item))}</p>
               <p class="body">{_e(_item_secondary(item))}</p>
             </div>
-          </div>"""
-        for index, item in enumerate(row_items, start=1)
-    )
+          </div>""" for index, item in enumerate(row_items, start=1))
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
@@ -1388,20 +1416,21 @@ def _render_swiss_warning_rows(page: dict) -> str:
 
 
 def _render_swiss_pipeline(page: dict) -> str:
-    items = (page.get("items") or [])[:3] or _slot_items(page, "sentences", limit=3) or _swiss_items(page, limit=3)
+    items = (
+        (page.get("items") or [])[:3]
+        or _slot_items(page, "sentences", limit=3)
+        or _swiss_items(page, limit=3)
+    )
     column_count = max(1, min(len(items), 3))
     grid_columns = f"repeat({column_count},minmax(0,1fr))"
-    steps = "\n".join(
-        f"""
+    steps = "\n".join(f"""
           <div class="card-outlined" style="display:flex;flex-direction:column;justify-content:space-between;min-height:100%">
             <p class="num-xl">{index:02d}</p>
             <div>
               <p class="lead" style="font-size:38px;line-height:1.12">{_e(_item_primary(item))}</p>
               <p class="body">{_e(_item_secondary(item))}</p>
             </div>
-          </div>"""
-        for index, item in enumerate(items, start=1)
-    )
+          </div>""" for index, item in enumerate(items, start=1))
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
@@ -1442,17 +1471,14 @@ def _render_swiss_takeaway_ledger(page: dict) -> str:
         if page.get("role") == "closing"
         else (_slot_items(page, "details", limit=3) or _slot_items(page, "sentences", limit=3))
     )
-    rows = "\n".join(
-        f"""
+    rows = "\n".join(f"""
           <div style="display:grid;grid-template-columns:160px 1fr;gap:var(--sp-7);padding:var(--sp-7) 0;border-top:1px solid var(--grey-2)">
             <p class="num-xl" style="font-size:88px">{_e(item.get("index", f"{index:02d}"))}</p>
             <div>
               <p class="lead">{_e(_item_primary(item))}</p>
               <p class="body">{_e(_item_secondary(item))}</p>
             </div>
-          </div>"""
-        for index, item in enumerate(row_items, start=1)
-    )
+          </div>""" for index, item in enumerate(row_items, start=1))
     evidence = "" if page.get("role") == "closing" else _swiss_evidence_panel(page, min_height=320)
     inner = f"""
       <div class="content stack gap-7">
@@ -1487,14 +1513,11 @@ def _render_swiss_image_hero(page: dict) -> str:
            thumbnail policy: verify 360px title readability; if needed, use localized image-toned tint only.
       -->"""
     stats = _swiss_stats(page, limit=3)
-    stat_html = "\n".join(
-        f"""
+    stat_html = "\n".join(f"""
           <div class="stat-block" data-metric-source="{_e(stat.get("source", "proxy"))}">
             <p class="num">{_e(stat.get("num"))}</p>
             <p class="lbl">{_e(stat.get("lbl"))}</p>
-          </div>"""
-        for stat in stats
-    )
+          </div>""" for stat in stats)
     stat_html += f"""
           <div class="stat-block">
             <p class="num">{len(_norm_text(page.get("body", ""))) or 1}</p>
@@ -1533,22 +1556,16 @@ def _render_swiss_kpi_tower(page: dict) -> str:
     extracted_stats = [stat for stat in stats if stat.get("source") == "extracted"]
     body_lines = _copy_slots(page).get("sentences") or _swiss_body_lines(page, limit=4)
     argument_items = _labelled_items(body_lines, limit=4)
-    metric_cards = "\n".join(
-        f"""
+    metric_cards = "\n".join(f"""
           <div class="card-accent" data-metric-source="extracted" style="min-height:210px;padding:var(--sp-6);display:flex;flex-direction:column;justify-content:space-between">
             <p class="t-meta" style="margin:0;color:var(--accent-on);opacity:.72">{_e(stat.get("lbl", "EXTRACTED"))}</p>
             <p style="font-family:var(--sans);font-size:112px;font-weight:200;line-height:1;letter-spacing:-.02em;margin:0;color:var(--accent-on)">{_e(stat.get("num"))}</p>
-          </div>"""
-        for stat in extracted_stats[:2]
-    )
-    argument_cards = "\n".join(
-        f"""
+          </div>""" for stat in extracted_stats[:2])
+    argument_cards = "\n".join(f"""
           <div class="card-fill" style="min-height:180px;padding:var(--sp-6);display:flex;flex-direction:column;justify-content:space-between">
             <p class="t-meta" style="margin:0;color:var(--grey-3)">{_e(item.get("index", f"{index:02d}"))}</p>
             <p class="body" style="margin:0;font-size:27px;line-height:1.38">{_e(_item_secondary(item) or _item_primary(item))}</p>
-          </div>"""
-        for index, item in enumerate(argument_items[: (2 if extracted_stats else 4)], start=1)
-    )
+          </div>""" for index, item in enumerate(argument_items[: (2 if extracted_stats else 4)], start=1))
     cols = metric_cards + argument_cards
     evidence = _swiss_evidence_panel(page, min_height=300)
     inner = f"""
@@ -1571,15 +1588,12 @@ def _render_swiss_kpi_tower(page: dict) -> str:
 def _render_swiss_hbar(page: dict) -> str:
     rows = _swiss_metric_rows(page, limit=6)
     max_value = max([int(row.get("value") or 1) for row in rows] or [1])
-    row_html = "\n".join(
-        f"""
+    row_html = "\n".join(f"""
           <div class="bar-row">
             <div class="row-lbl">{_e(row.get("label"))}</div>
             <div class="row-track"><div class="row-fill" style="--w:{max(16, round((int(row.get("value") or 1) / max_value) * 100))}%"></div></div>
             <div class="row-val" data-metric-source="{_e(row.get("source"))}">{_e(row.get("display_value"))}</div>
-          </div>"""
-        for row in rows
-    )
+          </div>""" for row in rows)
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
@@ -1595,15 +1609,12 @@ def _render_swiss_hbar(page: dict) -> str:
 def _render_swiss_stacked_ledger(page: dict) -> str:
     icons = ["square-stack", "book-open", "bolt", "keyboard", "coffee", "layers"]
     items = _swiss_items(page, limit=5)
-    rows = "\n".join(
-        f"""
+    rows = "\n".join(f"""
           <div class="ledger-row">
             <p class="ledger-num">{_e(item.get("index", f"{index:02d}"))}</p>
             <div class="ledger-lbl">{_e(_item_primary(item))}<span class="sub">{_e(_item_secondary(item))}</span></div>
             <i class="ledger-icn" data-lucide="{icons[(index - 1) % len(icons)]}"></i>
-          </div>"""
-        for index, item in enumerate(items, start=1)
-    )
+          </div>""" for index, item in enumerate(items, start=1))
     # 增加底部 stat，填补最后一 band，改善 R5 密度
     stat_lead = _slot_text(page, "caption", page.get("footer", ""))
     inner = f"""
@@ -1641,15 +1652,12 @@ def _render_swiss_matrix(page: dict) -> str:
     items = _slot_items(page, "sentences", limit=8) or _swiss_items(page, limit=8)
     matrix_style = ' style="grid-template-columns:1fr;grid-auto-rows:min-content"' if len(items) <= 3 else ""
     cell_min_height = 220 if len(items) <= 3 else 300 if len(items) <= 4 else 160
-    cells = "\n".join(
-        f"""
+    cells = "\n".join(f"""
           <div class="matrix-cell{' is-accent' if index == 1 else ''}" style="min-height:{cell_min_height}px">
             <p class="cell-nb">{index:02d}</p>
             <p class="cell-title">{_e(_item_primary(item))}</p>
             <p class="body" style="font-size:24px;line-height:1.34;margin:0;color:{'var(--accent-on)' if index == 1 else 'var(--ink)'}">{_e(_item_secondary(item))}</p>
-          </div>"""
-        for index, item in enumerate(items, start=1)
-    )
+          </div>""" for index, item in enumerate(items, start=1))
     inner = f"""
       <div class="content stack gap-7">
 {_swiss_header(page)}
@@ -1678,14 +1686,11 @@ def _render_swiss_map_route(page: dict) -> str:
     destination = route.get("destination") or (nodes[-1].get("label") if nodes else "B")
     stops = route.get("stops") or [n.get("label") for n in nodes[1:-1]]
     # 构建抽象地图节点 HTML
-    node_html = "\n".join(
-        f"""
+    node_html = "\n".join(f"""
           <div class="map-node" style="display:flex;flex-direction:column;align-items:center;gap:10px">
             <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);border:4px solid var(--white);box-shadow:0 0 0 2px var(--accent)"></div>
             <p class="t-meta" style="text-transform:none;letter-spacing:0">{_e(n.get('label', ''))}</p>
-          </div>"""
-        for n in nodes
-    )
+          </div>""" for n in nodes)
     route_line = """
           <div style="position:absolute;top:11px;left:0;right:0;height:2px;background:var(--accent);opacity:.4;z-index:0"></div>"""
     stops_html = " · ".join(_e(s) for s in stops) if stops else "直接连接"

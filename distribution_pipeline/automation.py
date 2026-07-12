@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
 import os
-from pathlib import Path
 import traceback
+from datetime import datetime
+from pathlib import Path
 
 from distribution_pipeline.generate_distribution import run as run_distribution
-
 
 FALSE_VALUES = {"0", "false", "no", "off", "否", "不"}
 
@@ -70,12 +69,12 @@ def generate_distribution_after_rewrite(
         return None
 
     resolved_export_images = (
-        _env_bool("CHORA_DISTRIBUTION_EXPORT_IMAGES", True)
-        if export_images is None
-        else export_images
+        _env_bool("CHORA_DISTRIBUTION_EXPORT_IMAGES", True) if export_images is None else export_images
     )
     resolved_image_assets = image_asset_mode or os.environ.get("CHORA_DISTRIBUTION_IMAGE_ASSETS", "plan")
-    resolved_output_root = Path(output_root or os.environ.get("CHORA_DISTRIBUTION_OUTPUT_ROOT", "distribution"))
+    resolved_output_root = Path(
+        output_root or os.environ.get("CHORA_DISTRIBUTION_OUTPUT_ROOT", "distribution")
+    )
     resolved_platform = platform or os.environ.get("CHORA_DISTRIBUTION_PLATFORM", "xhs")
     resolved_max_cards = max_cards if max_cards is not None else _env_int("CHORA_DISTRIBUTION_MAX_CARDS")
 
@@ -99,4 +98,3 @@ def generate_distribution_after_rewrite(
 
     print(f"✅ Guizang distribution package: {package_dir}")
     return package_dir
-

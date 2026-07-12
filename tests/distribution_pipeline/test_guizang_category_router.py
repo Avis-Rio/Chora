@@ -155,6 +155,7 @@ def test_detect_rednote_category_handles_recommend_catchall():
 
 # --- 显式标签（EXPLICIT_LABEL_SCORE）路径 ---
 
+
 def test_detect_rednote_category_uses_explicit_label_even_when_keywords_diverge():
     source = {"title": "我家咖啡角的装修", "channel": "Chora", "tags": ["家居"]}
     # 关键词会同时命中 "home"（家居）和可能的 "fashion"（单品/ootd）或 "food"（咖啡）
@@ -176,6 +177,7 @@ def test_detect_rednote_category_uses_english_explicit_label():
 
 
 # --- out-of-scope pushback ---
+
 
 def test_detect_rednote_category_pushes_back_on_dreamcore():
     source = {"title": "Y2K 千禧辣妹卧室合集", "channel": "Chora", "tags": []}
@@ -223,6 +225,7 @@ def test_detect_rednote_category_pushes_back_on_photo_essay():
 
 
 # --- 默认 fallthrough 边界 ---
+
 
 def test_detect_rednote_category_returns_clean_default_when_no_signal():
     source = {"title": "随笔", "channel": "Chora", "tags": []}

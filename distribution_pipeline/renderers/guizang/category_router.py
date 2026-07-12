@@ -1,12 +1,26 @@
 from __future__ import annotations
 
-
 CATEGORY_TABLE = {
     "travel": {
         "label": "旅行",
         "capability": "strong",
         "mode_hint": "editorial",
-        "keywords": ("旅行", "旅居", "城市", "目的地", "路线", "行程", "景点", "徒步", "酒店", "民宿", "山野", "海边", "travel", "trip"),
+        "keywords": (
+            "旅行",
+            "旅居",
+            "城市",
+            "目的地",
+            "路线",
+            "行程",
+            "景点",
+            "徒步",
+            "酒店",
+            "民宿",
+            "山野",
+            "海边",
+            "travel",
+            "trip",
+        ),
         "editorial": ("M01", "M16", "M02", "M11", "M07"),
         "swiss": ("S01", "S11", "S06", "S07"),
         "deck_sequence": {
@@ -19,7 +33,20 @@ CATEGORY_TABLE = {
         "label": "职场",
         "capability": "strong",
         "mode_hint": "swiss",
-        "keywords": ("职场", "工作", "团队", "管理", "效率", "会议", "绩效", "流程", "复盘", "career", "office", "workplace"),
+        "keywords": (
+            "职场",
+            "工作",
+            "团队",
+            "管理",
+            "效率",
+            "会议",
+            "绩效",
+            "流程",
+            "复盘",
+            "career",
+            "office",
+            "workplace",
+        ),
         "editorial": ("M01", "M15", "M14", "M08", "M07"),
         "swiss": ("S01", "S02", "S05", "S06", "S07", "S09", "S11", "S12"),
         "deck_sequence": {
@@ -123,7 +150,19 @@ CATEGORY_TABLE = {
         "label": "情感",
         "capability": "essay_only",
         "mode_hint": "editorial",
-        "keywords": ("情感", "孤独", "孤寂", "独处", "关系", "亲密", "分手", "消失", "alone", "solitude", "disappear"),
+        "keywords": (
+            "情感",
+            "孤独",
+            "孤寂",
+            "独处",
+            "关系",
+            "亲密",
+            "分手",
+            "消失",
+            "alone",
+            "solitude",
+            "disappear",
+        ),
         "editorial": ("M04", "M09", "M11", "M13", "M07"),
         "swiss": ("S02", "S07", "S12"),
         "deck_sequence": {
@@ -149,17 +188,51 @@ CATEGORY_TABLE = {
 
 # 反向索引：显式标签/中英文别名 → 品类 key（lowercased 比较）
 CATEGORY_BY_LABEL = {
-    "旅行": "travel", "travel": "travel", "trip": "travel", "journey": "travel",
-    "职场": "workplace", "workplace": "workplace", "career": "workplace", "office": "workplace",
-    "游戏": "game", "game": "game", "gaming": "game", "games": "game",
-    "影视": "film", "电影": "film", "film": "film", "movie": "film", "movies": "film",
-    "美食": "food", "food": "food", "recipe": "food", "recipes": "food", "cooking": "food",
-    "彩妆": "makeup", "makeup": "makeup", "cosmetics": "makeup", "cosmetic": "makeup",
-    "健身": "fitness", "fitness": "fitness", "workout": "fitness", "running": "fitness",
-    "家居": "home", "home": "home", "interior": "home", "house": "home",
-    "穿搭": "fashion", "fashion": "fashion", "outfit": "fashion", "wardrobe": "fashion",
-    "情感": "emotion", "emotion": "emotion", "essay": "emotion",
-    "推荐": "recommend", "recommend": "recommend", "review": "recommend", "reviews": "recommend",
+    "旅行": "travel",
+    "travel": "travel",
+    "trip": "travel",
+    "journey": "travel",
+    "职场": "workplace",
+    "workplace": "workplace",
+    "career": "workplace",
+    "office": "workplace",
+    "游戏": "game",
+    "game": "game",
+    "gaming": "game",
+    "games": "game",
+    "影视": "film",
+    "电影": "film",
+    "film": "film",
+    "movie": "film",
+    "movies": "film",
+    "美食": "food",
+    "food": "food",
+    "recipe": "food",
+    "recipes": "food",
+    "cooking": "food",
+    "彩妆": "makeup",
+    "makeup": "makeup",
+    "cosmetics": "makeup",
+    "cosmetic": "makeup",
+    "健身": "fitness",
+    "fitness": "fitness",
+    "workout": "fitness",
+    "running": "fitness",
+    "家居": "home",
+    "home": "home",
+    "interior": "home",
+    "house": "home",
+    "穿搭": "fashion",
+    "fashion": "fashion",
+    "outfit": "fashion",
+    "wardrobe": "fashion",
+    "情感": "emotion",
+    "emotion": "emotion",
+    "essay": "emotion",
+    "推荐": "recommend",
+    "recommend": "recommend",
+    "review": "recommend",
+    "reviews": "recommend",
 }
 
 # 显式标签显式命中时使用的 score 哨兵；用于在调用方判断"用户已点明品类"
@@ -172,8 +245,17 @@ OUT_OF_SCOPE_SUBTYPES = {
     "dreamcore": {
         "label": "梦核 / Y2K / kawaii 装饰风",
         "keywords": (
-            "梦核", "氛围感", "氛围装饰", "y2k", "千禧", "千禧辣妹", "哥特萝莉",
-            "kawaii", "aesthetic", "梦核风", "氛围感装饰",
+            "梦核",
+            "氛围感",
+            "氛围装饰",
+            "y2k",
+            "千禧",
+            "千禧辣妹",
+            "哥特萝莉",
+            "kawaii",
+            "aesthetic",
+            "梦核风",
+            "氛围感装饰",
         ),
         "reason": (
             "梦核 / Y2K / kawaii / 氛围感装饰风与 Editorial 与 Swiss 两套视觉系统"
@@ -183,8 +265,13 @@ OUT_OF_SCOPE_SUBTYPES = {
     "ootd_body": {
         "label": "穿搭日常 OOTD 全身照",
         "keywords": (
-            "ootd 全身", "日常 ootd", "自拍穿搭", "全身穿搭", "穿搭自拍",
-            "daily outfit", "全身照穿搭",
+            "ootd 全身",
+            "日常 ootd",
+            "自拍穿搭",
+            "全身穿搭",
+            "穿搭自拍",
+            "daily outfit",
+            "全身照穿搭",
         ),
         "reason": (
             "本 skill 不生成或请求人像全身照；日常 OOTD 全身超出能力范围。"
@@ -194,24 +281,29 @@ OUT_OF_SCOPE_SUBTYPES = {
     "food_showcase": {
         "label": "美食菜品大片摆盘",
         "keywords": (
-            "菜品大片", "摆盘大片", "美食大片", "餐厅氛围", "米其林摆盘",
-            "菜片拍摄", "food photography",
+            "菜品大片",
+            "摆盘大片",
+            "美食大片",
+            "餐厅氛围",
+            "米其林摆盘",
+            "菜片拍摄",
+            "food photography",
         ),
         "reason": (
-            "本 skill 不替代专业美食摄影；菜品大片摆盘超出能力范围。"
-            "建议改用专业摄影 + 简单图说工具。"
+            "本 skill 不替代专业美食摄影；菜品大片摆盘超出能力范围。" "建议改用专业摄影 + 简单图说工具。"
         ),
     },
     "photo_essay": {
         "label": "纯摄影秀 / 摄影集",
         "keywords": (
-            "摄影集", "摄影秀", "photo essay", "摄影作品", "纯摄影",
+            "摄影集",
+            "摄影秀",
+            "photo essay",
+            "摄影作品",
+            "纯摄影",
             "photography showcase",
         ),
-        "reason": (
-            "本 skill 是图文排版系统，非纯摄影秀工具。"
-            "当图本身就是全部交付物时，超出 skill 范围。"
-        ),
+        "reason": ("本 skill 是图文排版系统，非纯摄影秀工具。" "当图本身就是全部交付物时，超出 skill 范围。"),
     },
 }
 

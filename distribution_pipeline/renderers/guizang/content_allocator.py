@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from html import unescape
 import re
+from html import unescape
 
 
 def norm_text(text: str) -> str:
@@ -46,9 +46,9 @@ def _push_unique(values: list[str], seen: set[str], value: str) -> None:
 
 
 # Cover / lead / detail 字數上限（防渲染溢出）
-HERO_MAX_CHARS = 12      # cover hero h1 允許中文字符數
-LEAD_MAX_CHARS = 120     # hero_question / structure lead 段落
-DETAIL_MAX_CHARS = 76    # density_panel / detail 條目
+HERO_MAX_CHARS = 12  # cover hero h1 允許中文字符數
+LEAD_MAX_CHARS = 120  # hero_question / structure lead 段落
+DETAIL_MAX_CHARS = 76  # density_panel / detail 條目
 CAPTION_MAX_CHARS = 60
 MIN_PAYLOAD_CHARS = 190
 MIN_DETAIL_COUNT = 3
@@ -75,7 +75,12 @@ def build_copy_slots(page: dict) -> dict:
     if norm_text(pullquote):
         seen.add(norm_text(pullquote))
     unique_sentences: list[str] = []
-    for sentence in [subhead, *point_values, *split_sentences(body, limit=6), *split_sentences(page.get("source_body", ""), limit=8)]:
+    for sentence in [
+        subhead,
+        *point_values,
+        *split_sentences(body, limit=6),
+        *split_sentences(page.get("source_body", ""), limit=8),
+    ]:
         _push_unique(unique_sentences, seen, sentence)
 
     lead = unique_sentences[0] if unique_sentences else body
@@ -83,7 +88,11 @@ def build_copy_slots(page: dict) -> dict:
     if norm_text(lead):
         detail_seen.add(norm_text(lead))
     details: list[str] = []
-    for detail in [*detail_values, *unique_sentences[1:6], *split_sentences(page.get("source_body", ""), limit=8)]:
+    for detail in [
+        *detail_values,
+        *unique_sentences[1:6],
+        *split_sentences(page.get("source_body", ""), limit=8),
+    ]:
         _push_unique(details, detail_seen, detail)
         if len(details) >= 5:
             break

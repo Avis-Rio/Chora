@@ -64,3 +64,4 @@ node_modules/
 
 # Agent files (workflows need to be tracked for slash commands)
 # .agent/
+.ruff_cache/

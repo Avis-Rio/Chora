@@ -59,7 +59,11 @@ def test_build_image_asset_plan_uses_creator_growth_queries():
         for index in range(1, 8)
     ]
     insights[0] = {"index": 1, "title": "算法是放大器，不是发动机", "one_liner": "先验证内容，再谈平台。"}
-    insights[4] = {"index": 5, "title": "互惠原则是社交增长的底层机制", "one_liner": "持续给予价值会自然激活回馈。"}
+    insights[4] = {
+        "index": 5,
+        "title": "互惠原则是社交增长的底层机制",
+        "one_liner": "持续给予价值会自然激活回馈。",
+    }
     insights[6] = {"index": 7, "title": "初学者有一个被忽视的优势", "one_liner": "选择更少，专注更强。"}
 
     plan = build_image_asset_plan(
@@ -79,12 +83,15 @@ def test_build_image_asset_plan_uses_creator_growth_queries():
 def test_build_image_asset_plan_uses_solitude_psychology_queries():
     content_dir = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
     insights = [
-        {"index": index, "title": f"洞察{index}", "one_liner": "独处不等于失败。"}
-        for index in range(1, 8)
+        {"index": index, "title": f"洞察{index}", "one_liner": "独处不等于失败。"} for index in range(1, 8)
     ]
     insights[0] = {"index": 1, "title": "孤独的历史性转变", "one_liner": "孤独曾是被尊重的主动选择。"}
     insights[4] = {"index": 5, "title": "外在动机对身份的侵蚀", "one_liner": "社交媒体把分享变成表演。"}
-    insights[6] = {"index": 7, "title": "孤独与孤寂的根本区别", "one_liner": "孤独是主动选择，孤寂是连接痛苦。"}
+    insights[6] = {
+        "index": 7,
+        "title": "孤独与孤寂的根本区别",
+        "one_liner": "孤独是主动选择，孤寂是连接痛苦。",
+    }
 
     plan = build_image_asset_plan(
         {"title": "Why People Disappear | The Psychology of Being Alone", "tags": ["Psychology"]},
@@ -103,11 +110,14 @@ def test_build_image_asset_plan_uses_solitude_psychology_queries():
 def test_build_image_asset_plan_prioritizes_third_space_visual():
     content_dir = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
     insights = [
-        {"index": index, "title": f"洞察{index}", "one_liner": "独处不等于失败。"}
-        for index in range(1, 8)
+        {"index": index, "title": f"洞察{index}", "one_liner": "独处不等于失败。"} for index in range(1, 8)
     ]
     insights[0] = {"index": 1, "title": "孤独的历史性转变", "one_liner": "孤独曾是被尊重的主动选择。"}
-    insights[2] = {"index": 3, "title": "第三空间的政治经济学", "one_liner": "公共空间消失后，偶遇失去物理基础。"}
+    insights[2] = {
+        "index": 3,
+        "title": "第三空间的政治经济学",
+        "one_liner": "公共空间消失后，偶遇失去物理基础。",
+    }
     insights[4] = {"index": 5, "title": "外在动机对身份的侵蚀", "one_liner": "社交媒体把分享变成表演。"}
 
     plan = build_image_asset_plan(
@@ -119,15 +129,9 @@ def test_build_image_asset_plan_prioritizes_third_space_visual():
     )
 
     evidence_insights = [
-        request["target_insight_index"]
-        for request in plan["requests"]
-        if request["role"] == "evidence"
+        request["target_insight_index"] for request in plan["requests"] if request["role"] == "evidence"
     ]
-    evidence_queries = [
-        request["query"]
-        for request in plan["requests"]
-        if request["role"] == "evidence"
-    ]
+    evidence_queries = [request["query"] for request in plan["requests"] if request["role"] == "evidence"]
 
     assert evidence_insights[:3] == [1, 3, 5]
     assert "quiet city cafe library" in evidence_queries
@@ -136,8 +140,7 @@ def test_build_image_asset_plan_prioritizes_third_space_visual():
 def test_build_image_asset_plan_spaces_evidence_requests_across_long_deck():
     content_dir = Path("tests/fixtures/content_archive/2026-05-13/youtube_硅谷101_Token经济学")
     insights = [
-        {"index": index, "title": f"洞察{index}", "one_liner": "数据筛选是护城河"}
-        for index in range(1, 11)
+        {"index": index, "title": f"洞察{index}", "one_liner": "数据筛选是护城河"} for index in range(1, 11)
     ]
 
     plan = build_image_asset_plan(
@@ -149,14 +152,10 @@ def test_build_image_asset_plan_spaces_evidence_requests_across_long_deck():
     )
 
     evidence_targets = [
-        request["target_pages"][0]
-        for request in plan["requests"]
-        if request["role"] == "evidence"
+        request["target_pages"][0] for request in plan["requests"] if request["role"] == "evidence"
     ]
     evidence_insights = [
-        request["target_insight_index"]
-        for request in plan["requests"]
-        if request["role"] == "evidence"
+        request["target_insight_index"] for request in plan["requests"] if request["role"] == "evidence"
     ]
 
     assert evidence_targets == ["xhs-02", "xhs-06", "xhs-08", "xhs-10"]

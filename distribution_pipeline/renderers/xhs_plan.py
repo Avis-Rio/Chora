@@ -55,15 +55,32 @@ def _line_break(title: str, max_first: int = 12) -> list[str]:
 def _cover_hook(source: dict, insights: list[dict]) -> tuple[str, list[str], str]:
     source_title = str(source.get("title", "") or "")
     joined = f"{source_title} {' '.join(item.get('title', '') for item in insights[:4])}"
-    if ("Gemini" in joined and ("谷歌" in joined or "Google" in joined)) or "谷歌AI" in joined or "谷歌 AI" in joined:
+    if (
+        ("Gemini" in joined and ("谷歌" in joined or "Google" in joined))
+        or "谷歌AI" in joined
+        or "谷歌 AI" in joined
+    ):
         title = "谷歌 AI 慢了半拍，但还没输"
-        return title, ["谷歌 AI 慢了半拍", "但还没输"], "先看几个反直觉判断：技术、组织、数据，哪一个才决定 Gemini 的翻身。"
-    if any(word in joined.lower() for word in ("people disappear", "being alone", "solitude", "孤独", "孤寂", "独处")):
+        return (
+            title,
+            ["谷歌 AI 慢了半拍", "但还没输"],
+            "先看几个反直觉判断：技术、组织、数据，哪一个才决定 Gemini 的翻身。",
+        )
+    if any(
+        word in joined.lower()
+        for word in ("people disappear", "being alone", "solitude", "孤独", "孤寂", "独处")
+    ):
         title = "为什么越来越多人选择消失"
         return title, ["为什么越来越多人", "选择消失"], "不是不合群，而是现代生活正在让连接变得更难。"
-    if any(word in joined.lower() for word in ("grow an audience", "followers", "0 followers", "粉丝", "受众")):
+    if any(
+        word in joined.lower() for word in ("grow an audience", "followers", "0 followers", "粉丝", "受众")
+    ):
         title = "从零粉丝开始，增长靠的不是算法"
-        return title, ["从零粉丝开始", "增长靠的不是算法"], "真正能拉动增长的杠杆只有两个：验证内容，真实社交。"
+        return (
+            title,
+            ["从零粉丝开始", "增长靠的不是算法"],
+            "真正能拉动增长的杠杆只有两个：验证内容，真实社交。",
+        )
     if "Token" in joined or "成本" in joined:
         title = "AI 成本，正在重新分配权力"
         return title, ["AI 成本", "重新分配权力"], "看懂 Token，不只是看价格，而是看谁能定义计算的边界。"
@@ -166,16 +183,24 @@ def build_xhs_card_plan(
     card_copies: list[dict] | None = None,
 ) -> list[dict]:
     if max_cards is None:
-        max_cards = _growth_card_count(insights, epilogue) if strategy == "growth-depth" else _auto_card_count(insights, epilogue)
+        max_cards = (
+            _growth_card_count(insights, epilogue)
+            if strategy == "growth-depth"
+            else _auto_card_count(insights, epilogue)
+        )
     if max_cards < 2:
         raise ValueError("max_cards must be at least 2")
     if strategy not in ("archive", "growth-depth"):
         raise ValueError(f"Unknown xhs card strategy: {strategy}")
 
-    cover_title, cover_lines, cover_body = _cover_hook(source, insights) if strategy == "growth-depth" else (
-        source.get("title", "Chora"),
-        None,
-        f"来源：{source.get('channel', 'Unknown')}",
+    cover_title, cover_lines, cover_body = (
+        _cover_hook(source, insights)
+        if strategy == "growth-depth"
+        else (
+            source.get("title", "Chora"),
+            None,
+            f"来源：{source.get('channel', 'Unknown')}",
+        )
     )
 
     cards = [
@@ -198,7 +223,9 @@ def build_xhs_card_plan(
     )
 
     copies = card_copies or []
-    copy_by_index = {str(item.get("insight_index")): item for item in copies if item.get("insight_index") is not None}
+    copy_by_index = {
+        str(item.get("insight_index")): item for item in copies if item.get("insight_index") is not None
+    }
     allow_positional_copy = bool(copies) and not copy_by_index
     for insight_offset, insight in enumerate(selected_insights):
         copy = copy_by_index.get(str(insight.get("index")))

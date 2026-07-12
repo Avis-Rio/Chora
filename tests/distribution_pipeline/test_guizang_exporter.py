@@ -1,5 +1,4 @@
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -41,6 +40,7 @@ def test_export_guizang_images_returns_output_pngs(tmp_path, monkeypatch):
     assert calls[0][1] == xhs_dir
     # 優先已存在的用戶緩存（macOS），否則項目緩存
     from distribution_pipeline.renderers.guizang.exporter import _resolve_default_playwright_browsers
+
     expected = str(_resolve_default_playwright_browsers() or PROJECT_PLAYWRIGHT_BROWSERS)
     assert calls[0][4]["PLAYWRIGHT_BROWSERS_PATH"] == expected
     assert images == [image_path]

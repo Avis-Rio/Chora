@@ -11,7 +11,6 @@ from distribution_pipeline.renderers.guizang.title_breaker import semantic_title
 from distribution_pipeline.renderers.guizang.title_budget import title_variants
 from distribution_pipeline.renderers.xhs_plan import build_xhs_card_plan
 
-
 METRIC_RE = re.compile(
     r"(?P<num>\d+(?:\.\d+)?)\s*(?P<unit>%|％|倍|年|个月|月|周|天|小时|分钟|秒|美元|美金|元|万|亿|k|K|m|M|b|B)?"
 )
@@ -72,7 +71,9 @@ def _content_payload(card: dict) -> dict:
     points = card.get("points") or _split_points(body, limit=5)
     details = card.get("details") or _split_points(source_body or body, limit=5)
     pullquote = str(card.get("pullquote") or "")
-    chars = len("".join(ch for ch in " ".join([body, source_body, pullquote, *points, *details]) if ch.strip()))
+    chars = len(
+        "".join(ch for ch in " ".join([body, source_body, pullquote, *points, *details]) if ch.strip())
+    )
     return {
         "chars": chars,
         "points": len(points),
@@ -92,9 +93,25 @@ def content_profile(source: dict, insights: list[dict]) -> str:
             " ".join(item.get("body", "") for item in insights[:3]),
         ]
     ).lower()
-    if any(word in text for word in ("grow an audience", "followers", "粉丝", "受众", "创作者", "社交媒体", "networking")):
+    if any(
+        word in text
+        for word in ("grow an audience", "followers", "粉丝", "受众", "创作者", "社交媒体", "networking")
+    ):
         return "creator-growth"
-    if any(word in text for word in ("people disappear", "being alone", "solitude", "孤独", "孤寂", "独处", "回避", "第三空间", "蛰居")):
+    if any(
+        word in text
+        for word in (
+            "people disappear",
+            "being alone",
+            "solitude",
+            "孤独",
+            "孤寂",
+            "独处",
+            "回避",
+            "第三空间",
+            "蛰居",
+        )
+    ):
         return "solitude-psychology"
     if any(word in text for word in ("gemini", "deepmind", "openai", "ai", "模型", "算力", "视觉")):
         return "ai-tech"
@@ -102,11 +119,39 @@ def content_profile(source: dict, insights: list[dict]) -> str:
 
 
 def _has_map_signal(text: str) -> bool:
-    return any(word in text for word in (
-        "地理", "地域", "地缘", "跨境", "出海", "迁移", "流动", "流向", "路线", "供应链",
-        "东西方", "东方", "西方", "东移", "西移", "全球化", "区域", "国家", "中美", "中欧",
-        "欧美", "航线", "物流", "贸易", "走廊", "通道", "节点", "枢纽",
-    ))
+    return any(
+        word in text
+        for word in (
+            "地理",
+            "地域",
+            "地缘",
+            "跨境",
+            "出海",
+            "迁移",
+            "流动",
+            "流向",
+            "路线",
+            "供应链",
+            "东西方",
+            "东方",
+            "西方",
+            "东移",
+            "西移",
+            "全球化",
+            "区域",
+            "国家",
+            "中美",
+            "中欧",
+            "欧美",
+            "航线",
+            "物流",
+            "贸易",
+            "走廊",
+            "通道",
+            "节点",
+            "枢纽",
+        )
+    )
 
 
 def _split_points(text: str, limit: int = 5) -> list[str]:
@@ -130,9 +175,29 @@ def _split_points(text: str, limit: int = 5) -> list[str]:
 def _extract_map_nodes(title: str, body: str, limit: int = 4) -> list[dict]:
     text = f"{title} {body}"
     candidates = [
-        "中国", "美国", "欧洲", "东南亚", "中东", "非洲", "拉美", "印度", "日本", "韩国",
-        "硅谷", "华尔街", "深圳", "北京", "上海", "香港", "新加坡", "迪拜",
-        "东方", "西方", "全球南方", "发达国家", "新兴市场",
+        "中国",
+        "美国",
+        "欧洲",
+        "东南亚",
+        "中东",
+        "非洲",
+        "拉美",
+        "印度",
+        "日本",
+        "韩国",
+        "硅谷",
+        "华尔街",
+        "深圳",
+        "北京",
+        "上海",
+        "香港",
+        "新加坡",
+        "迪拜",
+        "东方",
+        "西方",
+        "全球南方",
+        "发达国家",
+        "新兴市场",
     ]
     # 按文本出现顺序收集，避免标题里的“东方”插队到 body“中东”之前
     nodes = []
@@ -164,7 +229,10 @@ def _strong_sentence_count(text: str) -> int:
 
 
 def _has_checklist_signal(text: str) -> bool:
-    return any(word in text for word in ("步骤", "方法", "清单", "指南", "行动", "建议", "习惯", "原则", "要点", "做法"))
+    return any(
+        word in text
+        for word in ("步骤", "方法", "清单", "指南", "行动", "建议", "习惯", "原则", "要点", "做法")
+    )
 
 
 def _has_comparison_signal(text: str) -> bool:
@@ -205,9 +273,8 @@ def _extract_metric_tokens(text: str, limit: int = 4) -> list[dict]:
 
 
 def _has_swiss_kpi_signal(text: str) -> bool:
-    return (
-        len(_extract_metric_tokens(text, limit=4)) >= 2
-        and any(word in text for word in ("数据", "指标", "增长", "成本", "Token", "百分比", "%", "倍"))
+    return len(_extract_metric_tokens(text, limit=4)) >= 2 and any(
+        word in text for word in ("数据", "指标", "增长", "成本", "Token", "百分比", "%", "倍")
     )
 
 
@@ -293,11 +360,18 @@ def _sequence_recipe(
     if role != "insight" or not sequence:
         return None
 
-    insight_sequence = [recipe for recipe in sequence if recipe[0] in ("M", "S") and recipe not in ("M01", "S01", "M07", "S07")]
+    insight_sequence = [
+        recipe
+        for recipe in sequence
+        if recipe[0] in ("M", "S") and recipe not in ("M01", "S01", "M07", "S07")
+    ]
     if not insight_sequence:
         return None
 
-    ordered = insight_sequence[offset % len(insight_sequence) :] + insight_sequence[: offset % len(insight_sequence)]
+    ordered = (
+        insight_sequence[offset % len(insight_sequence) :]
+        + insight_sequence[: offset % len(insight_sequence)]
+    )
     for recipe in ordered:
         if recipe == previous:
             continue
@@ -391,7 +465,9 @@ def _growth_title(title: str) -> str:
     return clean
 
 
-def _choose_insight_recipe(card: dict, has_image: bool, previous: str | None, offset: int, profile: str = "default") -> str:
+def _choose_insight_recipe(
+    card: dict, has_image: bool, previous: str | None, offset: int, profile: str = "default"
+) -> str:
     body = card.get("body", "")
     payload = _content_payload(card)
     points = card.get("points") or _split_points(body, limit=5)
@@ -436,12 +512,16 @@ def _choose_insight_recipe(card: dict, has_image: bool, previous: str | None, of
         return _sparse_recipe(previous)
     if len(points) >= 4:
         return "M08" if previous != "M08" else "M11"
-    if len(points) >= 3 and any(word in text for word in ("驱使", "导致", "反而", "因为", "所以", "窗口", "路径", "路线")):
+    if len(points) >= 3 and any(
+        word in text for word in ("驱使", "导致", "反而", "因为", "所以", "窗口", "路径", "路线")
+    ):
         return "M14" if previous != "M14" else "M03"
     return _choose_recipe(["M03", "M11", "M09"], previous, offset=offset)
 
 
-def _choose_editorial_category_recipe(card: dict, has_image: bool, previous: str | None, category: dict) -> str | None:
+def _choose_editorial_category_recipe(
+    card: dict, has_image: bool, previous: str | None, category: dict
+) -> str | None:
     key = category.get("key")
     body = card.get("body", "")
     points = _split_points(body, limit=5)
@@ -478,15 +558,18 @@ def _choose_swiss_insight_recipe(
             return "S13"
     if has_image and has_subject_map and previous != "S08":
         return "S08"
-    if any(word in lowered for word in ("top", "ranking", "rank")) or any(word in text for word in ("排名", "前十", "最高", "最低")):
+    if any(word in lowered for word in ("top", "ranking", "rank")) or any(
+        word in text for word in ("排名", "前十", "最高", "最低")
+    ):
         return "S10" if previous != "S10" else "S03"
     if (
-        _has_comparison_signal(text)
-        or "不等于" in text
-        or ("强模型" in text and "弱模型" in text)
+        _has_comparison_signal(text) or "不等于" in text or ("强模型" in text and "弱模型" in text)
     ) and previous != "S02":
         return "S02"
-    if any(word in text for word in ("风险", "陷阱", "错误", "误区", "不要", "不能", "警惕")) and previous != "S05":
+    if (
+        any(word in text for word in ("风险", "陷阱", "错误", "误区", "不要", "不能", "警惕"))
+        and previous != "S05"
+    ):
         return "S05"
     if (
         any(word in text for word in ("流程", "路径", "系统", "架构", "步骤", "链路", "工作流"))
@@ -504,7 +587,9 @@ def _choose_swiss_insight_recipe(
         and previous != "S03"
     ):
         return "S03"
-    sequence = _sequence_recipe(category or {}, "swiss", "insight", offset, previous, has_image, has_subject_map, text)
+    sequence = _sequence_recipe(
+        category or {}, "swiss", "insight", offset, previous, has_image, has_subject_map, text
+    )
     if sequence:
         return sequence
     if len(points) >= 3 and previous != "S12":
@@ -558,8 +643,6 @@ def _short_cover_lines(title: str) -> list[str]:
     return semantic_title_lines(clean, target=12, max_lines=2, min_tail=3)
 
 
-
-
 def _cap_title_chars(text: str, limit: int) -> str:
     """硬 cap 標題中文字符數（標點計入），超限加省略號。"""
     clean = str(text or "").strip()
@@ -572,6 +655,7 @@ def _cover_line_limit(line_count: int) -> int:
     """Per-line char cap that loosens as we allow more lines, so longer titles
     keep more of their tail instead of being aggressively truncated."""
     return {1: 20, 2: 18, 3: 14}.get(line_count, 12)
+
 
 def _closing_items(insights: list[dict]) -> list[dict]:
     items = []
@@ -668,7 +752,15 @@ def _page_from_card(
     brand: dict,
 ) -> dict:
     original_title = card.get("title", "")
-    title = original_title if card.get("title_lines") else (_growth_title(original_title) if card.get("strategy") == "growth-depth" and role == "insight" else original_title)
+    title = (
+        original_title
+        if card.get("title_lines")
+        else (
+            _growth_title(original_title)
+            if card.get("strategy") == "growth-depth" and role == "insight"
+            else original_title
+        )
+    )
     body = card.get("body", "")
     page_id = f"xhs-{index:02d}"
     insight_number = card.get("insight_index") or max(index - 1, 1)
@@ -689,7 +781,10 @@ def _page_from_card(
         "title": title,
         "display_title": title,
         "short_title": title_variant["short_title"],
-        "title_lines": card_title_lines or semantic_title_lines(title, target=title_variant["title_budget"]["line_chars"], max_lines=8, min_tail=3),
+        "title_lines": card_title_lines
+        or semantic_title_lines(
+            title, target=title_variant["title_budget"]["line_chars"], max_lines=8, min_tail=3
+        ),
         "title_budget": {**title_variant["title_budget"], "max_lines": 8},
         "original_title": original_title,
         "subhead": subhead,
@@ -816,7 +911,9 @@ def build_xhs_pages(package: dict, max_cards: int | None = None, mode: str = "ed
                 or _choose_insight_recipe(card, has_image, previous_recipe, offset, profile)
             )
         elif mode == "swiss" and role == "insight":
-            recipe = _choose_swiss_insight_recipe(card, has_image, has_subject_map, previous_recipe, offset, category)
+            recipe = _choose_swiss_insight_recipe(
+                card, has_image, has_subject_map, previous_recipe, offset, category
+            )
         elif mode == "swiss" and role == "philosophy":
             # philosophy 默认用更密集的 S07，避免 S12 矩阵在哲思页密度不足
             recipe = "S07" if previous_recipe != "S07" else "S12"
@@ -824,7 +921,11 @@ def build_xhs_pages(package: dict, max_cards: int | None = None, mode: str = "ed
             recipe = "S07"
         else:
             recipe = _choose_recipe(recipes[role], previous_recipe, offset=offset)
-        pages.append(_page_from_card(card, source, insights, image_assets, recipe, index, role, profile, category, mode, brand))
+        pages.append(
+            _page_from_card(
+                card, source, insights, image_assets, recipe, index, role, profile, category, mode, brand
+            )
+        )
         previous_recipe = recipe
         if role == "insight":
             insight_offset += 1
