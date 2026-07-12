@@ -53,21 +53,18 @@ jobs:
           LLM_API_KEY: ci-stub
         run: |
           set +e  # keep going through pytest to surface full traceback
-          echo "::group::Python + pip versions"
           python --version
           pip --version
-          echo "::endgroup::"
-
-          echo "::group::pytest version + collection"
+          echo "---- pytest version ----"
           python -m pytest --version
-          python -m pytest tests/distribution_pipeline --collect-only 2>&1 | tail -120
-          echo "::endgroup::"
-
-          echo "::group::full pytest run"
+          echo "---- collection-only ----"
+          python -m pytest tests/distribution_pipeline --collect-only 2>&1 || true
+          echo "---- pytest full run ----"
           python -m pytest tests/distribution_pipeline --tb=long --showlocals \
-            2>&1 | tee /tmp/pytest_output.txt | tail -250
-          rc=${PIPESTATUS[0]}
-          echo "::endgroup::"
+            > /tmp/pytest_output.txt 2>&1
+          rc=$?
+          echo "---- last 120 lines of pytest output (visible without expanding groups) ----"
+          tail -120 /tmp/pytest_output.txt
           exit $rc
 
       - name: Upload pytest log on failure
