@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT))
 
 
 from feishu._fields import FieldMixin  # noqa: E402
+from feishu._records import RecordMixin  # noqa: E402
 from feishu._sync import SyncMixin  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -37,7 +38,7 @@ from feishu._sync import SyncMixin  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-class _BareFeishu(FieldMixin, SyncMixin):
+class _BareFeishu(FieldMixin, RecordMixin, SyncMixin):
     """Stand-in host for testing :class:`FieldMixin` + :class:`SyncMixin`.
 
     Mixin-derived test class that skips :class:`FeishuService.__init__`
@@ -48,6 +49,10 @@ class _BareFeishu(FieldMixin, SyncMixin):
     Tests can still monkeypatch any method they like (``get_table_fields``,
     ``upload_image``) — :class:`monkeypatch.setattr` on an instance attribute
     shadows whatever would be inherited.
+
+    :class:`RecordMixin` is mixed in so tests can ``monkeypatch.setattr``
+    :meth:`create_record` / :meth:`update_record` / :meth:`upload_image`
+    on the instance without ``AttributeError`` from the test harness.
     """
 
     def __init__(self):
@@ -367,3 +372,217 @@ class TestDefaultAliases:
             for alias in aliases:
                 assert isinstance(alias, str), f"{internal_key} contains non-string alias: {alias!r}"
                 assert alias, f"{internal_key} contains empty alias string"
+
+
+# ---------------------------------------------------------------------------
+# Auto-publish default + frontend refresh behaviour
+# ---------------------------------------------------------------------------
+
+
+class TestAutoPublishDefault:
+    """New records should default to ``published=True`` so the frontend
+    shows freshly-synced articles immediately, but operators can opt out
+    via env var or per-record override.
+
+    These tests pin down the contract added to ``sync_from_export``:
+
+    * Default behaviour (``CHORA_FEISHU_AUTO_PUBLISH`` unset or truthy)
+      injects ``item["published"] = True`` for **new** records only —
+      existing records still preserve their current flag.
+    * Setting ``CHORA_FEISHU_AUTO_PUBLISH=false`` skips the injection.
+    * A per-record ``item["published"]`` (even falsy) is respected and
+      not overwritten.
+    """
+
+    def _host(self, available=None):
+        host = _BareFeishu()
+        host.get_table_fields = lambda: available or {
+            "标题": "text",
+            "记录ID": "text",
+            "正文": "text",
+            "是否发布": "checkbox",
+        }
+        host.list_records = lambda page_size=500: []  # no existing records
+        host.upload_image = lambda path: "fake-token"
+        return host
+
+    def _capture_create(self, host, monkeypatch, tmp_path):
+        """Patch ``create_record`` to capture the item it receives."""
+        captured = {}
+
+        def fake_create(item, available_fields=None, file_token=None):
+            captured["item"] = dict(item)
+            captured["file_token"] = file_token
+            return "fake-record-id"
+
+        monkeypatch.setattr(host, "create_record", fake_create)
+        return captured
+
+    def test_default_injects_published_true(self, monkeypatch, tmp_path):
+        from feishu._sync import SyncMixin
+
+        export_file = tmp_path / "export.json"
+        export_file.write_text(
+            '[{"id": "new-1", "title": "午后偏见045", "rewritten": "body", '
+            '"cover_path": "", "tags": ["tag"], "publish_date": "2026-05-26", '
+            '"quotes": []}]',
+            encoding="utf-8",
+        )
+        host = self._host()
+        captured = self._capture_create(host, monkeypatch, tmp_path)
+
+        # CHORA_FEISHU_AUTO_PUBLISH unset → default True
+        monkeypatch.delenv("CHORA_FEISHU_AUTO_PUBLISH", raising=False)
+        # Don't actually re-run generate_frontend_data.py in the test.
+        monkeypatch.setenv("CHORA_FEISHU_REGENERATE_FRONTEND", "false")
+
+        SyncMixin.sync_from_export(host, export_path=str(export_file))
+
+        assert "item" in captured, "create_record was never called"
+        assert captured["item"].get("published") is True, (
+            f"expected published=True, got {captured['item'].get('published')!r}"
+        )
+
+    def test_env_var_disables_auto_publish(self, monkeypatch, tmp_path):
+        from feishu._sync import SyncMixin
+
+        export_file = tmp_path / "export.json"
+        export_file.write_text(
+            '[{"id": "new-2", "title": "Draft article", "rewritten": "body", '
+            '"tags": ["tag"], "publish_date": "2026-05-26", "quotes": []}]',
+            encoding="utf-8",
+        )
+        host = self._host()
+        captured = self._capture_create(host, monkeypatch, tmp_path)
+
+        monkeypatch.setenv("CHORA_FEISHU_AUTO_PUBLISH", "false")
+        monkeypatch.setenv("CHORA_FEISHU_REGENERATE_FRONTEND", "false")
+
+        SyncMixin.sync_from_export(host, export_path=str(export_file))
+
+        assert "item" in captured, "create_record was never called"
+        assert "published" not in captured["item"], (
+            f"expected published NOT to be set, got {captured['item'].get('published')!r}"
+        )
+
+    def test_per_record_published_false_not_overwritten(self, monkeypatch, tmp_path):
+        """Operator-supplied ``item["published"]=False`` must win."""
+        from feishu._sync import SyncMixin
+
+        export_file = tmp_path / "export.json"
+        export_file.write_text(
+            '[{"id": "new-3", "title": "Held-back article", "rewritten": "body", '
+            '"tags": ["tag"], "publish_date": "2026-05-26", "quotes": [], '
+            '"published": false}]',
+            encoding="utf-8",
+        )
+        host = self._host()
+        captured = self._capture_create(host, monkeypatch, tmp_path)
+
+        monkeypatch.delenv("CHORA_FEISHU_AUTO_PUBLISH", raising=False)
+        monkeypatch.setenv("CHORA_FEISHU_REGENERATE_FRONTEND", "false")
+
+        SyncMixin.sync_from_export(host, export_path=str(export_file))
+
+        assert captured["item"].get("published") is False, (
+            f"operator override lost: got {captured['item'].get('published')!r}"
+        )
+
+    def test_published_alias_resolves_in_create_payload(self, monkeypatch, tmp_path):
+        """End-to-end: a published item should appear in the Feishu POST body
+        as ``{'是否发布': True}`` (checkbox formatted as bool)."""
+        from feishu._sync import SyncMixin
+
+        export_file = tmp_path / "export.json"
+        export_file.write_text(
+            '[{"id": "new-4", "title": "Alias check", "rewritten": "body", '
+            '"tags": ["x"], "publish_date": "2026-05-26", "quotes": []}]',
+            encoding="utf-8",
+        )
+
+        host = _BareFeishu()
+        host.get_table_fields = lambda: {
+            "标题": "text",
+            "正文": "text",
+            "标签": "multi_select",
+            "发布时间": "date",
+            "记录ID": "text",
+            "是否发布": "checkbox",
+        }
+        host.list_records = lambda page_size=500: []
+        host.upload_image = lambda path: None
+
+        posted_payloads = []
+
+        def fake_create(item, available_fields=None, file_token=None):
+            # Mirror what _map_to_fields would do for the create call —
+            # use the host itself since it has field_aliases provisioned.
+            payload = host._map_to_fields(item, available_fields, file_token)
+            posted_payloads.append(payload)
+            return "fake-record-id"
+
+        monkeypatch.setattr(host, "create_record", fake_create)
+        monkeypatch.delenv("CHORA_FEISHU_AUTO_PUBLISH", raising=False)
+        monkeypatch.setenv("CHORA_FEISHU_REGENERATE_FRONTEND", "false")
+
+        SyncMixin.sync_from_export(host, export_path=str(export_file))
+
+        assert posted_payloads, "create_record was never called"
+        # The checkbox field should be formatted as a real bool.
+        assert posted_payloads[0].get("是否发布") is True, (
+            f"expected checkbox True, got {posted_payloads[0].get('是否发布')!r}"
+        )
+
+
+class TestFrontendRefreshTrigger:
+    """``sync_from_export`` should call ``generate_frontend_data.py`` once
+    after a successful sync (when anything changed). No-op when the
+    operator sets ``CHORA_FEISHU_REGENERATE_FRONTEND=false``."""
+
+    def test_refresh_called_when_records_changed(self, monkeypatch, tmp_path):
+        from feishu import _sync
+
+        export_file = tmp_path / "export.json"
+        export_file.write_text(
+            '[{"id": "r1", "title": "x", "rewritten": "y", "tags": [], '
+            '"publish_date": "2026-05-26", "quotes": []}]',
+            encoding="utf-8",
+        )
+
+        host = _BareFeishu()
+        host.get_table_fields = lambda: {"标题": "text", "是否发布": "checkbox"}
+        host.list_records = lambda page_size=500: []
+        host.upload_image = lambda path: None
+        host.create_record = lambda item, af=None, ft=None: "rid"
+
+        calls = []
+        monkeypatch.setattr(_sync, "_regenerate_frontend_data", lambda: calls.append(1))
+        monkeypatch.delenv("CHORA_FEISHU_REGENERATE_FRONTEND", raising=False)
+
+        _sync.SyncMixin.sync_from_export(host, export_path=str(export_file))
+
+        assert calls == [1], f"expected exactly one frontend refresh call, got {calls}"
+
+    def test_refresh_skipped_when_env_disabled(self, monkeypatch, tmp_path):
+        from feishu import _sync
+
+        export_file = tmp_path / "export.json"
+        export_file.write_text(
+            '[{"id": "r2", "title": "x", "rewritten": "y", "tags": [], '
+            '"publish_date": "2026-05-26", "quotes": []}]',
+            encoding="utf-8",
+        )
+
+        host = _BareFeishu()
+        host.get_table_fields = lambda: {"标题": "text", "是否发布": "checkbox"}
+        host.list_records = lambda page_size=500: []
+        host.upload_image = lambda path: None
+        host.create_record = lambda item, af=None, ft=None: "rid"
+
+        calls = []
+        monkeypatch.setattr(_sync, "_regenerate_frontend_data", lambda: calls.append(1))
+        monkeypatch.setenv("CHORA_FEISHU_REGENERATE_FRONTEND", "false")
+
+        _sync.SyncMixin.sync_from_export(host, export_path=str(export_file))
+
+        assert calls == [], "frontend refresh should have been skipped"

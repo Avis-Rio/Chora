@@ -19,6 +19,59 @@ Key behaviour preserved:
 
 import json
 import os
+import subprocess
+import sys
+
+
+def _auto_publish_enabled():
+    """Whether new records should default to ``published=True``.
+
+    Honours the ``CHORA_FEISHU_AUTO_PUBLISH`` env var. Default ``True``
+    so freshly synced articles appear on the frontend immediately; set
+    to ``0``/``false``/``no`` to keep them as drafts.
+    """
+    val = os.environ.get("CHORA_FEISHU_AUTO_PUBLISH", "true").strip().lower()
+    return val in ("", "1", "true", "yes", "on")
+
+
+def _regenerate_frontend_enabled():
+    """Whether to regenerate ``frontend/data/*.json`` after a sync.
+
+    Honours ``CHORA_FEISHU_REGENERATE_FRONTEND``. Default ``True`` so
+    the local fallback JSON stays in sync with the live Bitable; set
+    to ``0``/``false`` to skip (e.g. in CI / smoke tests).
+    """
+    val = os.environ.get("CHORA_FEISHU_REGENERATE_FRONTEND", "true").strip().lower()
+    return val in ("", "1", "true", "yes", "on")
+
+
+def _regenerate_frontend_data():
+    """Re-run ``generate_frontend_data.py`` after a successful sync.
+
+    Best-effort: failures are logged but do not roll back the Feishu
+    write. The frontend's primary data path is ``/api/content`` (live
+    Feishu), so a stale local fallback is degraded mode only.
+    """
+    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "generate_frontend_data.py")
+    if not os.path.exists(script):
+        print(f"⚠️ generate_frontend_data.py not found at {script}; skipping frontend refresh")
+        return
+    try:
+        result = subprocess.run(
+            [sys.executable, script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            print(f"⚠️ frontend data refresh failed (exit={result.returncode}): {result.stderr.strip()[:200]}")
+        else:
+            # Surface only the success lines so the operator sees what happened.
+            for line in result.stdout.splitlines():
+                if line.startswith("✅"):
+                    print(f"   {line}")
+    except Exception as e:  # pragma: no cover - defensive
+        print(f"⚠️ frontend data refresh raised: {e}")
 
 
 class SyncMixin:
@@ -161,6 +214,14 @@ class SyncMixin:
                     if cover_path and os.path.exists(cover_path) and has_cover_field:
                         file_token = self.upload_image(cover_path)
 
+                    # Default new records to ``published=True`` so the
+                    # frontend shows freshly-synced articles immediately.
+                    # Operators may override per-record (set ``item["published"]``
+                    # explicitly upstream) or globally via the
+                    # ``CHORA_FEISHU_AUTO_PUBLISH`` env var.
+                    if "published" not in item and _auto_publish_enabled():
+                        item["published"] = True
+
                     if self.create_record(item, available_fields, file_token):
                         created += 1
                     else:
@@ -176,3 +237,10 @@ class SyncMixin:
         print(f"   🔧 Updated: {updated}")
         print(f"   ⏭️  Skipped: {skipped}")
         print(f"   ❌ Failed: {failed}")
+
+        # Refresh local frontend JSON fallback so it stays in lock-step
+        # with what was just written to the Bitable. Skip when nothing
+        # changed or when the operator has explicitly disabled it.
+        if (created + updated) > 0 and _regenerate_frontend_enabled():
+            print("\n🔄 Refreshing frontend data...")
+            _regenerate_frontend_data()
