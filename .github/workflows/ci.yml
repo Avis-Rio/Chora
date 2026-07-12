@@ -41,34 +41,24 @@ jobs:
           GEMINI_API_KEY: ci-stub
           LLM_API_KEY: ci-stub
         run: |
-          set -e
           python -c "import sys; sys.path.insert(0, '.'); import generate_cover, distribution_pipeline, feishu_service, xiaoyuzhou_service, youtube_service; print('imports OK')"
 
-      - name: Run pytest (diagnose minimal)
+      - name: Run pytest
         env:
           GROQ_API_KEY: ci-stub
           GEMINI_API_KEY: ci-stub
           LLM_API_KEY: ci-stub
         run: |
-          set +e
-          echo "ENV:"
-          python --version
-          pip --version
-          pwd
-          ls -la
-          echo "REQUIREMENTS:"
-          pip show groq PyYAML Pillow requests playwright yt-dlp 2>&1 | grep -E '^(Name|Version):'
-          echo "==== COLLECTION-ONLY FULL OUTPUT (truncated to 4500 chars) ===="
-          python -m pytest tests/distribution_pipeline --collect-only --tb=short 2>&1 | head -c 4500
-          echo ""
-          echo "==== END COLLECTION ===="
+          python -m pytest tests/distribution_pipeline -q --tb=short
 
       - name: Upload pytest log on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: pytest-log-${{ matrix.python-version }}
-          path: /tmp/pytest_output.txt
+          path: |
+            /tmp/pytest_stdout.txt
+            /tmp/pytest_stderr.txt
           retention-days: 7
 
   lint-skill-md:
