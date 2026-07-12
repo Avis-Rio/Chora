@@ -44,38 +44,24 @@ jobs:
           set -e
           python -c "import sys; sys.path.insert(0, '.'); import generate_cover, distribution_pipeline, feishu_service, xiaoyuzhou_service, youtube_service; print('imports OK')"
 
-      - name: Run pytest (diagnose-by-file)
+      - name: Run pytest (diagnose minimal)
         env:
           GROQ_API_KEY: ci-stub
           GEMINI_API_KEY: ci-stub
           LLM_API_KEY: ci-stub
         run: |
           set +e
-          python -m pytest --version
-
-          echo "========== COLLECTION-ONLY START =========="
-          python -m pytest tests/distribution_pipeline --collect-only 2>&1 \
-            | head -120 || true
-          echo "========== COLLECTION-ONLY END =========="
-
-          # Try each test file individually and report which ones fail at collection
-          echo "========== PER-FILE COLLECTION START =========="
-          for f in tests/distribution_pipeline/test_*.py; do
-            out=$(python -m pytest "$f" --collect-only 2>&1)
-            if [ $? -ne 0 ]; then
-              echo "FAILED COLLECT: $f"
-              echo "$out" | head -30
-              echo "----"
-            fi
-          done
-          echo "========== PER-FILE COLLECTION END =========="
-
-          echo "========== FULL PYTEST RUN START =========="
-          python -m pytest tests/distribution_pipeline --tb=short 2>&1 \
-            | tail -80
-          rc=${PIPESTATUS[0]}
-          echo "========== FULL PYTEST RUN END (exit=$rc) =========="
-          exit $rc
+          echo "ENV:"
+          python --version
+          pip --version
+          pwd
+          ls -la
+          echo "REQUIREMENTS:"
+          pip show groq PyYAML Pillow requests playwright yt-dlp 2>&1 | grep -E '^(Name|Version):'
+          echo "==== COLLECTION-ONLY FULL OUTPUT (truncated to 4500 chars) ===="
+          python -m pytest tests/distribution_pipeline --collect-only --tb=short 2>&1 | head -c 4500
+          echo ""
+          echo "==== END COLLECTION ===="
 
       - name: Upload pytest log on failure
         if: failure()
