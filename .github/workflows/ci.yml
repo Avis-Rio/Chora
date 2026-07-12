@@ -35,6 +35,13 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
 
+      - name: Prepare runtime config
+        run: |
+          # config/*.yaml 被 .gitignore 忽略（避免泄漏真实密钥）；
+          # CI 用 sources.example.yaml 作为模板，
+          # 必含字段让 vision_subject_mapper 等下游模块能加载。
+          cp config/sources.example.yaml config/sources.yaml
+
       - name: Smoke-test imports
         env:
           GROQ_API_KEY: ci-stub
