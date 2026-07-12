@@ -439,9 +439,9 @@ class TestAutoPublishDefault:
         SyncMixin.sync_from_export(host, export_path=str(export_file))
 
         assert "item" in captured, "create_record was never called"
-        assert captured["item"].get("published") is True, (
-            f"expected published=True, got {captured['item'].get('published')!r}"
-        )
+        assert (
+            captured["item"].get("published") is True
+        ), f"expected published=True, got {captured['item'].get('published')!r}"
 
     def test_env_var_disables_auto_publish(self, monkeypatch, tmp_path):
         from feishu._sync import SyncMixin
@@ -461,9 +461,9 @@ class TestAutoPublishDefault:
         SyncMixin.sync_from_export(host, export_path=str(export_file))
 
         assert "item" in captured, "create_record was never called"
-        assert "published" not in captured["item"], (
-            f"expected published NOT to be set, got {captured['item'].get('published')!r}"
-        )
+        assert (
+            "published" not in captured["item"]
+        ), f"expected published NOT to be set, got {captured['item'].get('published')!r}"
 
     def test_per_record_published_false_not_overwritten(self, monkeypatch, tmp_path):
         """Operator-supplied ``item["published"]=False`` must win."""
@@ -484,9 +484,9 @@ class TestAutoPublishDefault:
 
         SyncMixin.sync_from_export(host, export_path=str(export_file))
 
-        assert captured["item"].get("published") is False, (
-            f"operator override lost: got {captured['item'].get('published')!r}"
-        )
+        assert (
+            captured["item"].get("published") is False
+        ), f"operator override lost: got {captured['item'].get('published')!r}"
 
     def test_published_alias_resolves_in_create_payload(self, monkeypatch, tmp_path):
         """End-to-end: a published item should appear in the Feishu POST body
@@ -529,9 +529,9 @@ class TestAutoPublishDefault:
 
         assert posted_payloads, "create_record was never called"
         # The checkbox field should be formatted as a real bool.
-        assert posted_payloads[0].get("是否发布") is True, (
-            f"expected checkbox True, got {posted_payloads[0].get('是否发布')!r}"
-        )
+        assert (
+            posted_payloads[0].get("是否发布") is True
+        ), f"expected checkbox True, got {posted_payloads[0].get('是否发布')!r}"
 
 
 class TestFrontendRefreshTrigger:

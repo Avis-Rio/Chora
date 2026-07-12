@@ -52,7 +52,9 @@ def _regenerate_frontend_data():
     write. The frontend's primary data path is ``/api/content`` (live
     Feishu), so a stale local fallback is degraded mode only.
     """
-    script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "generate_frontend_data.py")
+    script = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "generate_frontend_data.py"
+    )
     if not os.path.exists(script):
         print(f"⚠️ generate_frontend_data.py not found at {script}; skipping frontend refresh")
         return
@@ -64,7 +66,9 @@ def _regenerate_frontend_data():
             timeout=60,
         )
         if result.returncode != 0:
-            print(f"⚠️ frontend data refresh failed (exit={result.returncode}): {result.stderr.strip()[:200]}")
+            print(
+                f"⚠️ frontend data refresh failed (exit={result.returncode}): {result.stderr.strip()[:200]}"
+            )
         else:
             # Surface only the success lines so the operator sees what happened.
             for line in result.stdout.splitlines():
