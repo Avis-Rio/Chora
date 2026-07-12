@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 from html import escape
 from pathlib import Path
@@ -277,6 +278,7 @@ def _copy_local_asset(asset: dict, images_dir: Path) -> dict:
     copied.update(inspection)
     copied["filename"] = filename
     copied["render_path"] = f"assets/images/{filename}"
+    copied["status"] = "available"
     return copied
 
 
@@ -541,6 +543,125 @@ def _ai_fallback(
     return materialized
 
 
+def _generate_local_variants(source_cover: dict, images_dir: Path, evidence_offsets: list[int]) -> list[dict]:
+    """Derive 4 visual variants from a local cover using PIL — zero network.
+
+    Keeps the daily pipeline producing evidence images even when
+    ``image_asset_mode=plan`` (the default) refuses to download external
+    imagery. Variants are bound to evidence requests by ``target_insight_index``
+    so :func:`distribution_pipeline.renderers.guizang.page_planner._asset_for_page`
+    can pick them up automatically.
+
+    The four variants cover the most common compositions used by the
+    Guizang recipe bank:
+
+    * **hero** — full image (1:1) for the cover page and the rare
+      full-bleed insight pages.
+    * **top** — upper 1/3 crop, suitable for "subject at top" / portrait
+      framing recipes (M05, M09, S02).
+    * **bottom** — lower 1/3 crop, suitable for "subject at bottom" /
+      horizon / ledger layouts (M10, S07).
+    * **blur** — gaussian-blurred full image with a soft centre crop,
+      used as backdrop for text-on-image recipes (M16, M08).
+
+    Pillow is already a project dependency (``Pillow>=10.0.0`` in
+    ``requirements.txt``).
+    """
+    source_path = Path(source_cover.get("source_path", ""))
+    if not source_path.exists():
+        return []
+
+    try:
+        from PIL import Image, ImageFilter
+    except ImportError:  # pragma: no cover - Pillow is a hard dependency
+        return []
+
+    try:
+        with Image.open(source_path) as raw:
+            raw.load()
+            width, height = raw.size
+            if width < 320 or height < 320:
+                # Too small to derive meaningful variants — skip silently.
+                return []
+            base = raw.convert("RGB")
+
+            crops_dir = images_dir / "source-crops"
+            crops_dir.mkdir(parents=True, exist_ok=True)
+            stem = source_cover.get("asset_id", "source-cover")
+
+            def _save(img, suffix):
+                filename = f"{stem}-{suffix}.jpg"
+                target = crops_dir / filename
+                img.save(target, format="JPEG", quality=85)
+                return target
+
+            full_path = _save(base, "hero")
+            top_band = base.crop((0, 0, width, max(1, height // 3)))
+            top_path = _save(top_band, "top")
+            bottom_band = base.crop((0, max(0, height - height // 3), width, height))
+            bottom_path = _save(bottom_band, "bottom")
+            # Blur backdrop: downscale to 720px wide, heavy gaussian, then
+            # re-upscale so JPEG compression artefacts don't dominate.
+            blur_small = base.copy()
+            blur_small.thumbnail((720, 720))
+            blurred = blur_small.filter(ImageFilter.GaussianBlur(radius=18))
+            blur_backdrop = blurred.resize((width, height), Image.LANCZOS)
+            blur_path = _save(blur_backdrop, "blur")
+    except Exception as exc:  # pragma: no cover - PIL raises on corrupt bytes
+        print(f"⚠️ local variant generation failed for {source_path}: {exc}")
+        return []
+
+    # Bind each variant to a different evidence offset (if any were
+    # requested by the planner). Variant 0 binds to offset 0 (first
+    # evidence page); cycle through available offsets.
+    variants = [
+        {
+            "variant": "hero",
+            "filename": full_path.name,
+            "render_path": f"assets/images/source-crops/{full_path.name}",
+        },
+        {
+            "variant": "top",
+            "filename": top_path.name,
+            "render_path": f"assets/images/source-crops/{top_path.name}",
+        },
+        {
+            "variant": "bottom",
+            "filename": bottom_path.name,
+            "render_path": f"assets/images/source-crops/{bottom_path.name}",
+        },
+        {
+            "variant": "blur",
+            "filename": blur_path.name,
+            "render_path": f"assets/images/source-crops/{blur_path.name}",
+        },
+    ]
+
+    out = []
+    for index, variant in enumerate(variants):
+        target_insight_index = None
+        if evidence_offsets and index < len(evidence_offsets):
+            target_insight_index = evidence_offsets[index]
+        asset = {
+            "asset_id": f"{stem}-{variant['variant']}",
+            "role": "evidence",
+            "source_type": "local-variant",
+            "status": "available",
+            "filename": variant["filename"],
+            "render_path": variant["render_path"],
+            "source_path": str(source_path),
+            "target_pages": [],
+            "target_insight_index": target_insight_index,
+            "license_status": "source-provided",
+            "object_position": "center 50%",
+            "variant": variant["variant"],
+            "caption": f"Derived {variant['variant']} from {source_cover.get('filename', source_path.name)}",
+        }
+        out.append(asset)
+
+    return out
+
+
 def _sources_markdown(plan: dict) -> str:
     lines = [
         "# 图片来源与搜索计划",
@@ -625,16 +746,29 @@ def materialize_image_assets(
         }
     assets_dir = Path(assets_dir)
     images_dir = assets_dir / "images"
-    if image_asset_mode not in ("plan", "candidates", "download"):
+
+    # ----- Mode resolution ----------------------------------------------
+    # ``auto`` is the new default for daily rewrites: try local cover
+    # variants first (zero network), fall back to candidate enumeration
+    # only when there is no usable cover image. Operators may still force
+    # a specific mode via ``image_asset_mode`` or the env override
+    # ``CHORA_DISTRIBUTION_IMAGE_ASSETS`` (read by the automation
+    # wrapper). Operators who want to disable even the local variant
+    # derivation can set ``CHORA_DISTRIBUTION_DISABLE_LOCAL_VARIANTS=1``.
+    requested_mode = image_asset_mode
+    if requested_mode == "auto":
+        has_local_cover = bool(plan.get("local_assets"))
+        requested_mode = "plan" if has_local_cover else "candidates"
+    if requested_mode not in ("plan", "candidates", "download"):
         raise ValueError(f"Unknown image asset mode: {image_asset_mode}")
 
     materialized = copy.deepcopy(plan)
-    if image_asset_mode in ("candidates", "download"):
+    if requested_mode in ("candidates", "download"):
         materialized = enrich_image_candidates(
             materialized,
             fetch_json=fetch_json or default_fetch_json,
         )
-    if image_asset_mode == "download":
+    if requested_mode == "download":
         materialized = download_selected_assets(
             materialized,
             assets_dir,
@@ -644,12 +778,41 @@ def materialize_image_assets(
         _copy_local_asset(asset, images_dir) for asset in plan.get("local_assets", [])
     ]
     materialized.setdefault("selected_assets", [])
-    # 戊项 C 通道：未满足的 evidence/cover_hero → 调 Gemini AI 生图兜底
+
+    # ----- Local-variant derivation -------------------------------------
+    # When a usable local cover is present, derive 4 PIL variants
+    # (hero / top / bottom / blur) and bind them to the evidence
+    # offsets the planner already chose. This keeps the daily pipeline
+    # producing real images even when external downloading is disabled.
+    #
+    # IMPORTANT: iterate over a snapshot length, NOT the live list —
+    # extending ``local_assets`` inside the loop would re-derive the
+    # newly-added variants (which themselves have status="available"),
+    # producing an exponential explosion. See the regression test
+    # ``test_materialize_derives_variants_only_for_original_cover``.
+    if materialized["local_assets"] and os.environ.get(
+        "CHORA_DISTRIBUTION_DISABLE_LOCAL_VARIANTS", ""
+    ).lower() not in ("1", "true", "yes"):
+        evidence_offsets = []
+        for req in materialized.get("requests", []):
+            if req.get("target_insight_index") is not None:
+                evidence_offsets.append(req["target_insight_index"])
+        source_count = len(materialized["local_assets"])
+        for index in range(source_count):
+            source_cover = materialized["local_assets"][index]
+            if source_cover.get("status") != "available":
+                continue
+            variants = _generate_local_variants(source_cover, images_dir, evidence_offsets)
+            materialized["local_assets"].extend(variants)
+
+    # ----- AI fallback (戊项 C 通道) ------------------------------------
     # plan 模式（默认）只写搜索计划，按 upstream "Daily 后处理必须记录并继续"
     # 规则不得生成本地 fallback；candidates/download 模式才允许调 AI。
-    if image_asset_mode in ("candidates", "download"):
+    if requested_mode in ("candidates", "download"):
         category_key = category.get("key") if isinstance(category, dict) else category
         materialized = _ai_fallback(materialized, images_dir, category=category_key, theme=theme)
+
+    materialized["resolved_mode"] = requested_mode
     assets_dir.mkdir(parents=True, exist_ok=True)
     (assets_dir / "image_assets.json").write_text(
         json.dumps(materialized, ensure_ascii=False, indent=2),

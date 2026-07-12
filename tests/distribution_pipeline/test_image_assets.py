@@ -410,3 +410,247 @@ def test_materialize_image_assets_plan_does_not_generate_concept_fallback(tmp_pa
     assert materialized["selected_assets"] == []
     assert materialized["requests"][0].get("status") is None
     assert not (tmp_path / "assets" / "images" / "xhs-02-evidence.svg").exists()
+
+
+# ---------------------------------------------------------------------------
+# Local variant derivation (2026-07-12): when a usable cover exists,
+# PIL crops the cover into 4 evidence variants bound to the planner's
+# evidence offsets, so daily rewrites no longer need to download
+# external imagery to populate evidence pages.
+# ---------------------------------------------------------------------------
+
+
+def _write_cover(tmp_path: Path) -> Path:
+    """Write a real, PIL-readable cover image (>= 320x320) for variant derivation."""
+    from PIL import Image
+
+    cover = tmp_path / "content" / "cover.jpg"
+    cover.parent.mkdir(parents=True, exist_ok=True)
+    img = Image.new("RGB", (640, 480), color=(180, 60, 90))
+    img.save(cover, format="JPEG", quality=85)
+    return cover
+
+
+def test_generate_local_variants_writes_four_evidence_images(tmp_path):
+    cover = _write_cover(tmp_path)
+    source = {
+        "asset_id": "source-cover",
+        "role": "hero",
+        "source_type": "local",
+        "source_path": str(cover),
+    }
+    from distribution_pipeline.assets.image_assets import _generate_local_variants
+
+    images_dir = tmp_path / "images"
+    variants = _generate_local_variants(source, images_dir, evidence_offsets=[0, 1, 2, 3])
+
+    assert len(variants) == 4
+    variant_names = {v["variant"] for v in variants}
+    assert variant_names == {"hero", "top", "bottom", "blur"}
+
+    crops_dir = images_dir / "source-crops"
+    assert crops_dir.exists()
+    # Every declared variant file must exist on disk.
+    for v in variants:
+        assert (crops_dir / v["filename"]).exists()
+        assert v["status"] == "available"
+        assert v["license_status"] == "source-provided"
+        # render_path is package-relative for downstream consumers.
+        assert v["render_path"].startswith("assets/images/source-crops/")
+    # PIL-derived bytes must be non-trivial JPEG.
+    hero_bytes = (crops_dir / "source-cover-hero.jpg").read_bytes()
+    assert hero_bytes[:2] == b"\xff\xd8", "hero variant must be a real JPEG"
+
+
+def test_generate_local_variants_binds_to_evidence_offsets(tmp_path):
+    cover = _write_cover(tmp_path)
+    source = {"asset_id": "cover", "source_path": str(cover)}
+    from distribution_pipeline.assets.image_assets import _generate_local_variants
+
+    variants = _generate_local_variants(source, tmp_path / "images", evidence_offsets=[2, 5, 7, 9])
+    # Each variant carries the offset it should bind to in the planner.
+    seen = {v["variant"]: v["target_insight_index"] for v in variants}
+    assert seen == {"hero": 2, "top": 5, "bottom": 7, "blur": 9}
+
+
+def test_generate_local_variants_returns_empty_when_cover_missing(tmp_path):
+    source = {"asset_id": "cover", "source_path": str(tmp_path / "no_such.jpg")}
+    from distribution_pipeline.assets.image_assets import _generate_local_variants
+
+    assert _generate_local_variants(source, tmp_path / "images", []) == []
+
+
+def test_materialize_auto_mode_with_local_cover_uses_plan(tmp_path):
+    """image_asset_mode='auto' with a usable cover must resolve to 'plan'
+    and emit four derived evidence variants — never fall through to
+    network calls."""
+    cover = _write_cover(tmp_path)
+    plan = {
+        "version": 1,
+        "status": "planned",
+        "providers": {},
+        "local_assets": [
+            {
+                "asset_id": "source-cover",
+                "role": "hero",
+                "source_type": "local",
+                "status": "available",
+                "source_path": str(cover),
+                "target_pages": ["xhs-01"],
+            }
+        ],
+        "requests": [
+            {
+                "asset_id": "xhs-02-evidence",
+                "role": "evidence",
+                "target_pages": ["xhs-02"],
+                "query": "research lab",
+                "preferred_recipe": "M10",
+                "target_insight_index": 1,
+            },
+            {
+                "asset_id": "xhs-03-evidence",
+                "role": "evidence",
+                "target_pages": ["xhs-03"],
+                "query": "focused creator",
+                "preferred_recipe": "M11",
+                "target_insight_index": 2,
+            },
+        ],
+    }
+
+    materialized = materialize_image_assets(plan, tmp_path / "assets", image_asset_mode="auto")
+
+    # Auto should resolve to plan when a local cover exists.
+    assert materialized["resolved_mode"] == "plan"
+    # 1 original cover + 4 derived variants = 5 local_assets.
+    derived = [a for a in materialized["local_assets"] if a.get("source_type") == "local-variant"]
+    assert len(derived) == 4
+    # Variants must bind to the planner's evidence offsets.
+    targets = sorted(a["target_insight_index"] for a in derived if a.get("target_insight_index") is not None)
+    assert targets == [1, 2]
+    # And the variant files must actually be on disk.
+    # render_path is package-relative and already starts with
+    # "assets/images/source-crops/...", so resolve it directly
+    # against tmp_path (which IS the package root in this test).
+    for asset in derived:
+        full = tmp_path / asset["render_path"]
+        assert full.exists(), f"variant file missing: {full}"
+
+
+def test_materialize_auto_mode_without_cover_resolves_to_candidates(tmp_path):
+    """image_asset_mode='auto' with NO local cover must resolve to
+    'candidates' so the planner at least gets external search URLs."""
+    plan = {
+        "version": 1,
+        "status": "planned",
+        "providers": {},
+        "local_assets": [],
+        "requests": [
+            {
+                "asset_id": "xhs-02-evidence",
+                "role": "evidence",
+                "target_pages": ["xhs-02"],
+                "query": "research lab",
+                "preferred_recipe": "M10",
+            }
+        ],
+    }
+
+    materialized = materialize_image_assets(plan, tmp_path / "assets", image_asset_mode="auto")
+
+    assert materialized["resolved_mode"] == "candidates"
+
+
+def test_materialize_disable_local_variants_env(tmp_path, monkeypatch):
+    """Operators can opt out of local variant derivation via env."""
+    monkeypatch.setenv("CHORA_DISTRIBUTION_DISABLE_LOCAL_VARIANTS", "1")
+    cover = _write_cover(tmp_path)
+    plan = {
+        "version": 1,
+        "status": "planned",
+        "providers": {},
+        "local_assets": [
+            {
+                "asset_id": "source-cover",
+                "role": "hero",
+                "source_type": "local",
+                "status": "available",
+                "source_path": str(cover),
+                "target_pages": ["xhs-01"],
+            }
+        ],
+        "requests": [],
+    }
+
+    materialized = materialize_image_assets(plan, tmp_path / "assets")
+
+    # Original cover copied, but no derived variants.
+    derived = [a for a in materialized["local_assets"] if a.get("source_type") == "local-variant"]
+    assert derived == []
+    assert not (tmp_path / "assets" / "images" / "source-crops").exists()
+
+
+def test_materialize_writes_local_variants_to_sources_markdown(tmp_path):
+    """SOURCES.md must list every derived variant so operators see the
+    lineage back to the source cover."""
+    cover = _write_cover(tmp_path)
+    plan = {
+        "version": 1,
+        "status": "planned",
+        "providers": {},
+        "local_assets": [
+            {
+                "asset_id": "source-cover",
+                "role": "hero",
+                "source_type": "local",
+                "status": "available",
+                "source_path": str(cover),
+                "target_pages": ["xhs-01"],
+            }
+        ],
+        "requests": [],
+    }
+
+    materialize_image_assets(plan, tmp_path / "assets")
+
+    sources_md = (tmp_path / "assets" / "SOURCES.md").read_text(encoding="utf-8")
+    for variant in ("hero", "top", "bottom", "blur"):
+        assert variant in sources_md, f"SOURCES.md missing {variant} variant"
+
+
+def test_materialize_does_not_recurse_into_derived_variants(tmp_path):
+    """Regression: derive PIL variants only from the ORIGINAL cover,
+    never from the freshly-derived ones. A previous bug mutated the
+    ``local_assets`` list in-place inside the loop, causing exponential
+    blow-up (each derived variant itself had ``status='available'`` and
+    triggered another derivation pass).
+    """
+    cover = _write_cover(tmp_path)
+    plan = {
+        "version": 1,
+        "status": "planned",
+        "providers": {},
+        "local_assets": [
+            {
+                "asset_id": "source-cover",
+                "role": "hero",
+                "source_type": "local",
+                "status": "available",
+                "source_path": str(cover),
+                "target_pages": ["xhs-01"],
+            }
+        ],
+        "requests": [],
+    }
+
+    materialized = materialize_image_assets(plan, tmp_path / "assets")
+
+    # 1 original cover + 4 derived variants = 5 entries — never more.
+    assert len(materialized["local_assets"]) == 5, materialized["local_assets"]
+    derived = [a for a in materialized["local_assets"] if a.get("source_type") == "local-variant"]
+    assert len(derived) == 4
+    # And every variant's source_path must point back at the original
+    # cover, not at another derived variant.
+    for variant in derived:
+        assert variant["source_path"] == str(cover)
